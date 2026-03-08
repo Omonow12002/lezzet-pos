@@ -3,7 +3,12 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
-import Index from "./pages/Index";
+import { POSProvider } from "@/context/POSContext";
+import RoleSelection from "./pages/RoleSelection";
+import GarsonPOS from "./pages/GarsonPOS";
+import MutfakEkrani from "./pages/MutfakEkrani";
+import RestoranAdmin from "./pages/RestoranAdmin";
+import SuperAdmin from "./pages/SuperAdmin";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -13,13 +18,18 @@ const App = () => (
     <TooltipProvider>
       <Toaster />
       <Sonner />
-      <BrowserRouter>
-        <Routes>
-          <Route path="/" element={<Index />} />
-          {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-          <Route path="*" element={<NotFound />} />
-        </Routes>
-      </BrowserRouter>
+      <POSProvider>
+        <BrowserRouter>
+          <Routes>
+            <Route path="/" element={<RoleSelection />} />
+            <Route path="/garson" element={<GarsonPOS />} />
+            <Route path="/mutfak" element={<MutfakEkrani />} />
+            <Route path="/admin" element={<RestoranAdmin />} />
+            <Route path="/super-admin" element={<SuperAdmin />} />
+            <Route path="*" element={<NotFound />} />
+          </Routes>
+        </BrowserRouter>
+      </POSProvider>
     </TooltipProvider>
   </QueryClientProvider>
 );
