@@ -1,8 +1,9 @@
 import { useState, useMemo } from 'react';
 import { usePOS } from '@/context/POSContext';
-import { ArrowLeft, Plus, Trash2, UtensilsCrossed, Grid3X3, Tag, Users, Store, BarChart3, Edit3 } from 'lucide-react';
+import { ArrowLeft, Plus, Trash2, UtensilsCrossed, Grid3X3, Tag, Users, Store, BarChart3, Edit3, LayoutDashboard } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
+import AdminDashboard from '@/components/AdminDashboard';
 
 type Tab = 'menu' | 'kategori' | 'masa' | 'personel' | 'raporlar';
 
