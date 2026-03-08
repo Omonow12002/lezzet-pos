@@ -1,46 +1,78 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { usePOS } from '@/context/POSContext';
-import { ArrowLeft, Plus, Trash2, UtensilsCrossed, Grid3X3, Tag, Users, Store } from 'lucide-react';
+import { ArrowLeft, Plus, Trash2, UtensilsCrossed, Grid3X3, Tag, Users, Store, BarChart3, Edit3 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 
-type Tab = 'menu' | 'kategori' | 'masa' | 'personel';
+type Tab = 'menu' | 'kategori' | 'masa' | 'personel' | 'raporlar';
 
 const tabs: { id: Tab; label: string; icon: React.ReactNode }[] = [
   { id: 'menu', label: 'Menü', icon: <UtensilsCrossed className="w-5 h-5" /> },
   { id: 'kategori', label: 'Kategoriler', icon: <Tag className="w-5 h-5" /> },
   { id: 'masa', label: 'Masalar', icon: <Grid3X3 className="w-5 h-5" /> },
   { id: 'personel', label: 'Personel', icon: <Users className="w-5 h-5" /> },
+  { id: 'raporlar', label: 'Raporlar', icon: <BarChart3 className="w-5 h-5" /> },
 ];
 
 export default function RestoranAdmin() {
-  const { categories, setCategories, menuItems, setMenuItems, tables, setTables, floors } = usePOS();
+  const { categories, setCategories, menuItems, setMenuItems, tables, setTables, floors, orders } = usePOS();
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<Tab>('menu');
   const [newItemName, setNewItemName] = useState('');
   const [newItemPrice, setNewItemPrice] = useState('');
   const [newItemCategory, setNewItemCategory] = useState(categories[0]?.id || '');
+  const [newItemDesc, setNewItemDesc] = useState('');
   const [newCategoryName, setNewCategoryName] = useState('');
+  const [newCategoryIcon, setNewCategoryIcon] = useState('');
   const [newTableName, setNewTableName] = useState('');
   const [newTableFloor, setNewTableFloor] = useState(floors[0]);
+
+  // Report calculations
+  const reportData = useMemo(() => {
+    const totalSales = orders.reduce((sum, o) => sum + o.total, 0);
+    const totalOrders = orders.length;
+    const cashSales = orders.reduce((sum, o) => {
+      return sum + (o.payments || []).filter(p => p.method === 'nakit').reduce((s, p) => s + p.amount, 0);
+    }, 0);
+    const cardSales = orders.reduce((sum, o) => {
+      return sum + (o.payments || []).filter(p => p.method === 'kredi_karti').reduce((s, p) => s + p.amount, 0);
+    }, 0);
+
+    // Top selling products
+    const productCounts: Record<string, { name: string; count: number; revenue: number }> = {};
+    orders.forEach(o => {
+      o.items.forEach(item => {
+        const key = item.menuItem.id;
+        if (!productCounts[key]) productCounts[key] = { name: item.menuItem.name, count: 0, revenue: 0 };
+        productCounts[key].count += item.quantity;
+        productCounts[key].revenue += item.menuItem.price * item.quantity;
+      });
+    });
+    const topProducts = Object.values(productCounts).sort((a, b) => b.count - a.count).slice(0, 5);
+
+    return { totalSales, totalOrders, cashSales, cardSales, topProducts };
+  }, [orders]);
 
   const addMenuItem = () => {
     if (!newItemName || !newItemPrice) return;
     setMenuItems(prev => [...prev, {
       id: Date.now().toString(),
       name: newItemName,
+      description: newItemDesc || undefined,
       price: Number(newItemPrice),
       categoryId: newItemCategory,
     }]);
     setNewItemName('');
     setNewItemPrice('');
+    setNewItemDesc('');
     toast.success('Ürün eklendi');
   };
 
   const addCategory = () => {
     if (!newCategoryName) return;
-    setCategories(prev => [...prev, { id: Date.now().toString(), name: newCategoryName }]);
+    setCategories(prev => [...prev, { id: Date.now().toString(), name: newCategoryName, icon: newCategoryIcon || undefined }]);
     setNewCategoryName('');
+    setNewCategoryIcon('');
     toast.success('Kategori eklendi');
   };
 
@@ -82,6 +114,7 @@ export default function RestoranAdmin() {
               <h2 className="text-lg font-black mb-4">Menü Yönetimi</h2>
               <div className="flex gap-2 mb-6 flex-wrap">
                 <input value={newItemName} onChange={e => setNewItemName(e.target.value)} placeholder="Ürün adı" className="px-4 py-3 rounded-xl border bg-card text-sm flex-1 min-w-[150px]" />
+                <input value={newItemDesc} onChange={e => setNewItemDesc(e.target.value)} placeholder="Açıklama (opsiyonel)" className="px-4 py-3 rounded-xl border bg-card text-sm flex-1 min-w-[150px]" />
                 <input value={newItemPrice} onChange={e => setNewItemPrice(e.target.value)} placeholder="Fiyat (₺)" type="number" className="px-4 py-3 rounded-xl border bg-card text-sm w-28" />
                 <select value={newItemCategory} onChange={e => setNewItemCategory(e.target.value)} className="px-4 py-3 rounded-xl border bg-card text-sm">
                   {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
@@ -93,8 +126,9 @@ export default function RestoranAdmin() {
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                 {menuItems.map(item => (
                   <div key={item.id} className="flex items-center justify-between p-4 bg-card rounded-xl border hover:shadow-md transition-shadow">
-                    <div>
+                    <div className="min-w-0 flex-1">
                       <p className="font-bold text-sm">{item.name}</p>
+                      {item.description && <p className="text-xs text-muted-foreground truncate">{item.description}</p>}
                       <p className="text-primary font-black text-sm">{item.price} ₺</p>
                       <p className="text-xs text-muted-foreground">{categories.find(c => c.id === item.categoryId)?.name}</p>
                     </div>
@@ -111,6 +145,7 @@ export default function RestoranAdmin() {
             <div>
               <h2 className="text-lg font-black mb-4">Kategori Yönetimi</h2>
               <div className="flex gap-2 mb-6">
+                <input value={newCategoryIcon} onChange={e => setNewCategoryIcon(e.target.value)} placeholder="Emoji (ör: 🥩)" className="px-4 py-3 rounded-xl border bg-card text-sm w-24" />
                 <input value={newCategoryName} onChange={e => setNewCategoryName(e.target.value)} placeholder="Kategori adı" className="px-4 py-3 rounded-xl border bg-card text-sm flex-1" />
                 <button onClick={addCategory} className="px-5 py-3 rounded-xl bg-primary text-primary-foreground font-bold text-sm flex items-center gap-1.5 pos-btn shadow-md">
                   <Plus className="w-4 h-4" /> Ekle
@@ -174,6 +209,50 @@ export default function RestoranAdmin() {
                   </div>
                 ))}
               </div>
+            </div>
+          )}
+
+          {activeTab === 'raporlar' && (
+            <div>
+              <h2 className="text-lg font-black mb-4">Gün Sonu Raporu</h2>
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+                <div className="p-5 bg-card rounded-2xl border">
+                  <p className="text-xs text-muted-foreground font-bold uppercase">Toplam Satış</p>
+                  <p className="text-2xl font-black text-primary mt-1">{reportData.totalSales.toLocaleString('tr-TR')} ₺</p>
+                </div>
+                <div className="p-5 bg-card rounded-2xl border">
+                  <p className="text-xs text-muted-foreground font-bold uppercase">Sipariş Sayısı</p>
+                  <p className="text-2xl font-black text-foreground mt-1">{reportData.totalOrders}</p>
+                </div>
+                <div className="p-5 bg-card rounded-2xl border">
+                  <p className="text-xs text-muted-foreground font-bold uppercase">Nakit Satış</p>
+                  <p className="text-2xl font-black text-pos-success mt-1">{reportData.cashSales.toLocaleString('tr-TR')} ₺</p>
+                </div>
+                <div className="p-5 bg-card rounded-2xl border">
+                  <p className="text-xs text-muted-foreground font-bold uppercase">Kart Satış</p>
+                  <p className="text-2xl font-black text-pos-info mt-1">{reportData.cardSales.toLocaleString('tr-TR')} ₺</p>
+                </div>
+              </div>
+
+              <h3 className="text-base font-black mb-3">En Çok Satılan Ürünler</h3>
+              {reportData.topProducts.length === 0 ? (
+                <p className="text-muted-foreground text-sm">Henüz sipariş verisi yok.</p>
+              ) : (
+                <div className="space-y-2">
+                  {reportData.topProducts.map((p, i) => (
+                    <div key={i} className="flex items-center justify-between p-4 bg-card rounded-xl border">
+                      <div className="flex items-center gap-3">
+                        <span className="w-8 h-8 rounded-full bg-primary/10 text-primary font-black text-sm flex items-center justify-center">{i + 1}</span>
+                        <span className="font-bold text-sm">{p.name}</span>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-sm font-bold">{p.count} adet</p>
+                        <p className="text-xs text-primary font-bold">{p.revenue.toLocaleString('tr-TR')} ₺</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
         </div>
