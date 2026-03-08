@@ -215,7 +215,6 @@ export default function RestoranAdmin() {
             </div>
           )}
 
-          {activeTab === 'raporlar' && <AdminDashboard />}
         </div>
       </div>
     </div>
