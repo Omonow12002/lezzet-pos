@@ -229,7 +229,7 @@ export default function AdminDashboard() {
                 <X className="w-4 h-4" />
               </button>
             </div>
-            <div className="p-6 font-mono text-sm leading-relaxed text-gray-800 whitespace-pre-wrap">
+            <div id="receipt-content" className="p-6 font-mono text-sm leading-relaxed text-gray-800 whitespace-pre-wrap">
 {`----------- GÜN SONU -----------
 
 Tarih: ${shortDate}
@@ -252,7 +252,19 @@ ${stats.topSelling.map((p, i) => `  ${i + 1}. ${p.name.padEnd(20)} ${p.count} ad
             </div>
             <div className="px-5 pb-5 flex gap-2">
               <button
-                onClick={() => { setShowReceipt(false); }}
+                onClick={() => {
+                  const printContent = document.getElementById('receipt-content');
+                  if (printContent) {
+                    const printWindow = window.open('', '_blank', 'width=400,height=600');
+                    if (printWindow) {
+                      printWindow.document.write(`<html><head><title>Gün Sonu Raporu</title><style>body{font-family:monospace;font-size:14px;padding:20px;white-space:pre-wrap;}</style></head><body>${printContent.innerText}</body></html>`);
+                      printWindow.document.close();
+                      printWindow.print();
+                      printWindow.close();
+                    }
+                  }
+                  setShowReceipt(false);
+                }}
                 className="flex-1 py-3.5 rounded-xl bg-primary text-primary-foreground font-black text-sm pos-btn shadow-md"
               >
                 Günü Kapat & Yazdır

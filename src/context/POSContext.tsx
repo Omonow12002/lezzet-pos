@@ -138,7 +138,7 @@ export function POSProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const getTableOrders = useCallback((tableId: string) => {
-    return orders.filter(o => o.tableId === tableId && o.status !== 'hazir');
+    return orders.filter(o => o.tableId === tableId);
   }, [orders]);
 
   const setTableStatus = useCallback((tableId: string, status: TableStatus) => {

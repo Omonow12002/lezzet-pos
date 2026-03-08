@@ -15,7 +15,7 @@ function formatDuration(openedAt?: Date) {
 }
 
 export default function GarsonPOS() {
-  const { tables, categories, menuItems, addOrder, getTableOrders, setTableStatus, setTableTotal, openTable, modifierGroups, floors, addPayment, orders } = usePOS();
+  const { tables, categories, menuItems, addOrder, getTableOrders, setTableStatus, setTableTotal, openTable, modifierGroups, floors, addPayment, orders, removeOrder, updateOrder } = usePOS();
   const navigate = useNavigate();
   const [selectedTable, setSelectedTable] = useState<Table | null>(null);
   const [selectedCategory, setSelectedCategory] = useState(categories[0]?.id || '');
@@ -55,6 +55,9 @@ export default function GarsonPOS() {
     } else {
       setOrderItems([]);
     }
+    setShowPayment(false);
+    setPaymentMode('normal');
+    setSelectedPayItems(new Set());
   }, [getTableOrders]);
 
   const floorTables = useMemo(
@@ -203,10 +206,32 @@ export default function GarsonPOS() {
     }
   };
 
+  const handleQuickCash = (amount: number) => {
+    if (tableOrders.length > 0) {
+      const payment: Payment = {
+        id: Date.now().toString(),
+        orderId: tableOrders[0].id,
+        amount,
+        method: 'nakit',
+        createdAt: new Date(),
+      };
+      addPayment(tableOrders[0].id, payment);
+    }
+    toast.success(`${amount} ₺ nakit ödeme alındı`);
+    const newPaid = totalPaid + amount;
+    if (newPaid >= total) {
+      closeTable();
+    } else {
+      setTableStatus(selectedTable!.id, 'odeme_bekliyor');
+    }
+  };
+
   const closeTable = () => {
     if (!selectedTable) return;
     setTableStatus(selectedTable.id, 'bos');
     setTableTotal(selectedTable.id, 0);
+    // Remove all orders for this table
+    tableOrders.forEach(o => removeOrder(o.id));
     setOrderItems([]);
     setSelectedTable(null);
     setShowPayment(false);
@@ -257,17 +282,8 @@ export default function GarsonPOS() {
     if (!amount || amount <= 0 || !selectedTable) return;
     if (tableOrders.length > 0) {
       const order = tableOrders[0];
-      const current = order.prepayment || 0;
-      // Store prepayment on order via context
-      // For simplicity, use addPayment as prepayment marker
-      const payment: Payment = {
-        id: Date.now().toString(),
-        orderId: order.id,
-        amount,
-        method: 'nakit',
-        createdAt: new Date(),
-      };
-      addPayment(order.id, payment);
+      const newPrepayment = (order.prepayment || 0) + amount;
+      updateOrder(order.id, { prepayment: newPrepayment });
     }
     setPrepaymentAmount('');
     setShowPrepayment(false);
@@ -733,7 +749,7 @@ export default function GarsonPOS() {
                   <p className="text-xs font-bold text-muted-foreground uppercase mb-2">Hızlı Nakit</p>
                   <div className="grid grid-cols-5 gap-2">
                     {[10, 20, 50, 100, 200].map(amount => (
-                      <button key={amount} onClick={() => handlePayment('Nakit')} className="py-3 rounded-xl bg-muted font-bold text-sm pos-btn hover:bg-muted-foreground/10">
+                      <button key={amount} onClick={() => handleQuickCash(amount)} className="py-3 rounded-xl bg-muted font-bold text-sm pos-btn hover:bg-muted-foreground/10">
                         {amount}
                       </button>
                     ))}

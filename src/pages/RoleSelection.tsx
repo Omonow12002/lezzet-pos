@@ -22,7 +22,7 @@ export default function RoleSelection() {
   return (
     <div className="min-h-screen flex flex-col items-center justify-center gap-10 p-6 bg-background">
       <div className="text-center">
-        <h1 className="text-5xl font-black tracking-tight mb-2">🍽️ Restoran POS</h1>
+        <h1 className="text-5xl font-black tracking-tight mb-2">🍽️ Lezzet-i Ala POS</h1>
         <p className="text-muted-foreground text-lg">Giriş yapmak için rolünüzü seçin</p>
       </div>
       <div className="grid grid-cols-2 gap-4 w-full max-w-lg">
