@@ -5,9 +5,10 @@ import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import AdminDashboard from '@/components/AdminDashboard';
 
-type Tab = 'menu' | 'kategori' | 'masa' | 'personel' | 'raporlar';
+type Tab = 'dashboard' | 'menu' | 'kategori' | 'masa' | 'personel' | 'raporlar';
 
 const tabs: { id: Tab; label: string; icon: React.ReactNode }[] = [
+  { id: 'dashboard', label: 'Dashboard', icon: <LayoutDashboard className="w-5 h-5" /> },
   { id: 'menu', label: 'Menü', icon: <UtensilsCrossed className="w-5 h-5" /> },
   { id: 'kategori', label: 'Kategoriler', icon: <Tag className="w-5 h-5" /> },
   { id: 'masa', label: 'Masalar', icon: <Grid3X3 className="w-5 h-5" /> },
