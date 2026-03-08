@@ -216,49 +216,7 @@ export default function RestoranAdmin() {
             </div>
           )}
 
-          {activeTab === 'raporlar' && (
-            <div>
-              <h2 className="text-lg font-black mb-4">Gün Sonu Raporu</h2>
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-                <div className="p-5 bg-card rounded-2xl border">
-                  <p className="text-xs text-muted-foreground font-bold uppercase">Toplam Satış</p>
-                  <p className="text-2xl font-black text-primary mt-1">{reportData.totalSales.toLocaleString('tr-TR')} ₺</p>
-                </div>
-                <div className="p-5 bg-card rounded-2xl border">
-                  <p className="text-xs text-muted-foreground font-bold uppercase">Sipariş Sayısı</p>
-                  <p className="text-2xl font-black text-foreground mt-1">{reportData.totalOrders}</p>
-                </div>
-                <div className="p-5 bg-card rounded-2xl border">
-                  <p className="text-xs text-muted-foreground font-bold uppercase">Nakit Satış</p>
-                  <p className="text-2xl font-black text-pos-success mt-1">{reportData.cashSales.toLocaleString('tr-TR')} ₺</p>
-                </div>
-                <div className="p-5 bg-card rounded-2xl border">
-                  <p className="text-xs text-muted-foreground font-bold uppercase">Kart Satış</p>
-                  <p className="text-2xl font-black text-pos-info mt-1">{reportData.cardSales.toLocaleString('tr-TR')} ₺</p>
-                </div>
-              </div>
-
-              <h3 className="text-base font-black mb-3">En Çok Satılan Ürünler</h3>
-              {reportData.topProducts.length === 0 ? (
-                <p className="text-muted-foreground text-sm">Henüz sipariş verisi yok.</p>
-              ) : (
-                <div className="space-y-2">
-                  {reportData.topProducts.map((p, i) => (
-                    <div key={i} className="flex items-center justify-between p-4 bg-card rounded-xl border">
-                      <div className="flex items-center gap-3">
-                        <span className="w-8 h-8 rounded-full bg-primary/10 text-primary font-black text-sm flex items-center justify-center">{i + 1}</span>
-                        <span className="font-bold text-sm">{p.name}</span>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-sm font-bold">{p.count} adet</p>
-                        <p className="text-xs text-primary font-bold">{p.revenue.toLocaleString('tr-TR')} ₺</p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
+          {activeTab === 'raporlar' && <AdminDashboard />}
         </div>
       </div>
     </div>
