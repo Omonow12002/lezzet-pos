@@ -36,16 +36,16 @@ interface POSContextType {
   removeStaff: (id: string) => Promise<void>;
   updateStaff: (id: string, updates: Partial<Staff>) => Promise<void>;
   // Admin CRUD
-  addCategory: (cat: Omit<Category, 'id'>) => void;
-  removeCategory: (id: string) => void;
-  addMenuItem: (item: Omit<MenuItem, 'id'>) => void;
-  updateMenuItem: (id: string, updates: Partial<MenuItem>) => void;
-  removeMenuItem: (id: string) => void;
-  addTable: (table: Omit<Table, 'id'>) => void;
-  removeTable: (id: string) => void;
+  addCategory: (cat: Omit<Category, 'id'>) => Promise<void>;
+  removeCategory: (id: string) => Promise<void>;
+  addMenuItem: (item: Omit<MenuItem, 'id'>) => Promise<void>;
+  updateMenuItem: (id: string, updates: Partial<MenuItem>) => Promise<void>;
+  removeMenuItem: (id: string) => Promise<void>;
+  addTable: (table: Omit<Table, 'id'>) => Promise<void>;
+  removeTable: (id: string) => Promise<void>;
   // Floor CRUD
-  addFloor: (name: string) => void;
-  removeFloor: (name: string) => void;
+  addFloor: (name: string) => Promise<void>;
+  removeFloor: (name: string) => Promise<void>;
   // Daily closure
   closeDailyReport: (data: Omit<DailyClosure, 'id'>) => Promise<void>;
   // Product-modifier mapping
@@ -483,33 +483,33 @@ export function POSProvider({ restaurantId, staffId, children }: POSProviderProp
 
   // ─── Admin CRUD Helpers ────────────────────────
 
-  const addCategory = useCallback((cat: Omit<Category, 'id'>) => {
+  const addCategory = useCallback(async (cat: Omit<Category, 'id'>) => {
     const id = crypto.randomUUID();
+    const { error } = await supabase.from('categories').insert({ id, name: cat.name, icon: cat.icon || null, restaurant_id: restaurantId });
+    if (error) { console.error('addCategory error:', error); throw error; }
     setCategories(prev => [...prev, { ...cat, id }]);
-    supabase.from('categories').insert({ id, name: cat.name, icon: cat.icon || null, restaurant_id: restaurantId })
-      .then(({ error }) => { if (error) console.error('addCategory error:', error); });
   }, [restaurantId]);
 
-  const removeCategory = useCallback((id: string) => {
+  const removeCategory = useCallback(async (id: string) => {
+    const { error } = await supabase.from('categories').delete().eq('id', id);
+    if (error) { console.error('removeCategory error:', error); throw error; }
     setCategories(prev => prev.filter(c => c.id !== id));
-    supabase.from('categories').delete().eq('id', id)
-      .then(({ error }) => { if (error) console.error('removeCategory error:', error); });
   }, []);
 
-  const addMenuItemFn = useCallback((item: Omit<MenuItem, 'id'>) => {
+  const addMenuItemFn = useCallback(async (item: Omit<MenuItem, 'id'>) => {
     const id = crypto.randomUUID();
-    setMenuItems(prev => [...prev, { ...item, id }]);
-    supabase.from('menu_items').insert({
+    const { error } = await supabase.from('menu_items').insert({
       id, name: item.name, description: item.description || null, price: item.price,
       category_id: item.categoryId, has_modifiers: item.hasModifiers || false, image: item.image || null,
       portion_info: item.portionInfo || null, allergen_info: item.allergenInfo || null,
       spice_level: item.spiceLevel || 0, ingredients: item.ingredients || [],
       kitchen_note: item.kitchenNote || null, restaurant_id: restaurantId,
-    }).then(({ error }) => { if (error) console.error('addMenuItem error:', error); });
+    });
+    if (error) { console.error('addMenuItem error:', error); throw error; }
+    setMenuItems(prev => [...prev, { ...item, id }]);
   }, [restaurantId]);
 
-  const updateMenuItemFn = useCallback((id: string, updates: Partial<MenuItem>) => {
-    setMenuItems(prev => prev.map(m => m.id === id ? { ...m, ...updates } : m));
+  const updateMenuItemFn = useCallback(async (id: string, updates: Partial<MenuItem>) => {
     const dbUpdates: Record<string, unknown> = {};
     if (updates.name !== undefined) dbUpdates.name = updates.name;
     if (updates.description !== undefined) dbUpdates.description = updates.description || null;
@@ -523,53 +523,52 @@ export function POSProvider({ restaurantId, staffId, children }: POSProviderProp
     if (updates.ingredients !== undefined) dbUpdates.ingredients = updates.ingredients;
     if (updates.kitchenNote !== undefined) dbUpdates.kitchen_note = updates.kitchenNote || null;
     if (Object.keys(dbUpdates).length > 0) {
-      supabase.from('menu_items').update(dbUpdates).eq('id', id)
-        .then(({ error }) => { if (error) console.error('updateMenuItem error:', error); });
+      const { error } = await supabase.from('menu_items').update(dbUpdates).eq('id', id);
+      if (error) { console.error('updateMenuItem error:', error); throw error; }
     }
+    setMenuItems(prev => prev.map(m => m.id === id ? { ...m, ...updates } : m));
   }, []);
 
-  const removeMenuItemFn = useCallback((id: string) => {
+  const removeMenuItemFn = useCallback(async (id: string) => {
+    const { error } = await supabase.from('menu_items').update({ active: false }).eq('id', id);
+    if (error) { console.error('removeMenuItem error:', error); throw error; }
     setMenuItems(prev => prev.filter(m => m.id !== id));
-    supabase.from('menu_items').update({ active: false }).eq('id', id)
-      .then(({ error }) => { if (error) console.error('removeMenuItem error:', error); });
   }, []);
 
-  const addTableFn = useCallback((table: Omit<Table, 'id'>) => {
+  const addTableFn = useCallback(async (table: Omit<Table, 'id'>) => {
     const id = crypto.randomUUID();
-    setTables(prev => [...prev, { ...table, id }]);
     const floorId = reverseFloorMapRef.current.get(table.floor);
-    supabase.from('tables').insert({ id, name: table.name, status: table.status, floor_id: floorId, restaurant_id: restaurantId })
-      .then(({ error }) => { if (error) console.error('addTable error:', error); });
+    const { error } = await supabase.from('tables').insert({ id, name: table.name, status: table.status, floor_id: floorId, restaurant_id: restaurantId });
+    if (error) { console.error('addTable error:', error); throw error; }
+    setTables(prev => [...prev, { ...table, id }]);
   }, [restaurantId]);
 
-  const removeTableFn = useCallback((id: string) => {
+  const removeTableFn = useCallback(async (id: string) => {
+    const { error } = await supabase.from('tables').delete().eq('id', id);
+    if (error) { console.error('removeTable error:', error); throw error; }
     setTables(prev => prev.filter(t => t.id !== id));
-    supabase.from('tables').delete().eq('id', id)
-      .then(({ error }) => { if (error) console.error('removeTable error:', error); });
   }, []);
 
   // ─── Floor CRUD ────────────────────────────────
 
-  const addFloor = useCallback((name: string) => {
+  const addFloor = useCallback(async (name: string) => {
     const id = crypto.randomUUID();
+    const { error } = await supabase.from('floors').insert({ id, name, sort_order: floors.length + 1, restaurant_id: restaurantId });
+    if (error) { console.error('addFloor error:', error); throw error; }
     floorMapRef.current.set(id, name);
     reverseFloorMapRef.current.set(name, id);
     setFloors(prev => [...prev, name]);
-    supabase.from('floors').insert({ id, name, sort_order: floors.length + 1, restaurant_id: restaurantId })
-      .then(({ error }) => { if (error) console.error('addFloor error:', error); });
   }, [floors.length, restaurantId]);
 
-  const removeFloor = useCallback((name: string) => {
+  const removeFloor = useCallback(async (name: string) => {
     const floorId = reverseFloorMapRef.current.get(name);
     if (floorId) {
+      const { error } = await supabase.from('floors').delete().eq('id', floorId);
+      if (error) { console.error('removeFloor error:', error); throw error; }
       floorMapRef.current.delete(floorId);
       reverseFloorMapRef.current.delete(name);
     }
     setFloors(prev => prev.filter(f => f !== name));
-    if (floorId) {
-      supabase.from('floors').delete().eq('id', floorId)
-        .then(({ error }) => { if (error) console.error('removeFloor error:', error); });
-    }
   }, []);
 
   // ─── Staff CRUD (for admin panel) ──────────────

@@ -74,7 +74,7 @@ export default function RestoranAdmin() {
     setShowMenuDialog(true);
   };
 
-  const handleSaveMenuItem = () => {
+  const handleSaveMenuItem = async () => {
     if (!menuForm.name || !menuForm.price) return;
     const data = {
       name: menuForm.name,
@@ -86,36 +86,56 @@ export default function RestoranAdmin() {
       spiceLevel: menuForm.spiceLevel,
       kitchenNote: menuForm.kitchenNote || undefined,
     };
-    if (editingItem) {
-      updateMenuItem(editingItem.id, data);
-      toast.success('Urun guncellendi');
-    } else {
-      addMenuItem(data);
-      toast.success('Urun eklendi');
+    try {
+      if (editingItem) {
+        await updateMenuItem(editingItem.id, data);
+        toast.success('Urun guncellendi');
+      } else {
+        await addMenuItem(data);
+        toast.success('Urun eklendi');
+      }
+      setShowMenuDialog(false);
+    } catch (err: unknown) {
+      const msg = err && typeof err === 'object' && 'message' in err ? (err as Error).message : String(err);
+      toast.error('Menu islemi basarisiz: ' + msg);
     }
-    setShowMenuDialog(false);
   };
 
-  const handleAddCategory = () => {
+  const handleAddCategory = async () => {
     if (!newCategoryName) return;
-    addCategory({ name: newCategoryName, icon: newCategoryIcon || undefined });
-    setNewCategoryName('');
-    setNewCategoryIcon('');
-    toast.success('Kategori eklendi');
+    try {
+      await addCategory({ name: newCategoryName, icon: newCategoryIcon || undefined });
+      setNewCategoryName('');
+      setNewCategoryIcon('');
+      toast.success('Kategori eklendi');
+    } catch (err: unknown) {
+      const msg = err && typeof err === 'object' && 'message' in err ? (err as Error).message : String(err);
+      toast.error('Kategori eklenemedi: ' + msg);
+    }
   };
 
-  const handleAddTable = () => {
+  const handleAddTable = async () => {
     if (!newTableName) return;
-    addTable({ name: newTableName, status: 'bos', floor: newTableFloor });
-    setNewTableName('');
-    toast.success('Masa eklendi');
+    try {
+      await addTable({ name: newTableName, status: 'bos', floor: newTableFloor });
+      setNewTableName('');
+      toast.success('Masa eklendi');
+    } catch (err: unknown) {
+      const msg = err && typeof err === 'object' && 'message' in err ? (err as Error).message : String(err);
+      toast.error('Masa eklenemedi: ' + msg);
+    }
   };
 
-  const handleAddFloor = () => {
+  const handleAddFloor = async () => {
     if (!newFloorName) return;
-    addFloor(newFloorName);
-    setNewFloorName('');
-    toast.success('Kat eklendi');
+    try {
+      await addFloor(newFloorName);
+      setNewFloorName('');
+      toast.success('Kat eklendi');
+    } catch (err: unknown) {
+      const msg = err && typeof err === 'object' && 'message' in err ? (err as Error).message : String(err);
+      toast.error('Kat eklenemedi: ' + msg);
+    }
   };
 
   const handleAddStaff = async () => {
