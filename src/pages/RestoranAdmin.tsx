@@ -16,7 +16,7 @@ const tabs: { id: Tab; label: string; icon: React.ReactNode }[] = [
 ];
 
 export default function RestoranAdmin() {
-  const { categories, setCategories, menuItems, setMenuItems, tables, setTables, floors, orders } = usePOS();
+  const { categories, menuItems, tables, floors, orders, addCategory, removeCategory, addMenuItem, removeMenuItem, addTable, removeTable } = usePOS();
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<Tab>('raporlar');
   const [newItemName, setNewItemName] = useState('');
@@ -30,32 +30,31 @@ export default function RestoranAdmin() {
 
 
 
-  const addMenuItem = () => {
+  const handleAddMenuItem = () => {
     if (!newItemName || !newItemPrice) return;
-    setMenuItems(prev => [...prev, {
-      id: Date.now().toString(),
+    addMenuItem({
       name: newItemName,
       description: newItemDesc || undefined,
       price: Number(newItemPrice),
       categoryId: newItemCategory,
-    }]);
+    });
     setNewItemName('');
     setNewItemPrice('');
     setNewItemDesc('');
     toast.success('Ürün eklendi');
   };
 
-  const addCategory = () => {
+  const handleAddCategory = () => {
     if (!newCategoryName) return;
-    setCategories(prev => [...prev, { id: Date.now().toString(), name: newCategoryName, icon: newCategoryIcon || undefined }]);
+    addCategory({ name: newCategoryName, icon: newCategoryIcon || undefined });
     setNewCategoryName('');
     setNewCategoryIcon('');
     toast.success('Kategori eklendi');
   };
 
-  const addTable = () => {
+  const handleAddTable = () => {
     if (!newTableName) return;
-    setTables(prev => [...prev, { id: Date.now().toString(), name: newTableName, status: 'bos', floor: newTableFloor }]);
+    addTable({ name: newTableName, status: 'bos', floor: newTableFloor });
     setNewTableName('');
     toast.success('Masa eklendi');
   };
@@ -98,7 +97,7 @@ export default function RestoranAdmin() {
                 <select value={newItemCategory} onChange={e => setNewItemCategory(e.target.value)} className="px-4 py-3 rounded-xl border bg-card text-sm">
                   {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                 </select>
-                <button onClick={addMenuItem} className="px-5 py-3 rounded-xl bg-primary text-primary-foreground font-bold text-sm flex items-center gap-1.5 pos-btn shadow-md">
+                <button onClick={handleAddMenuItem} className="px-5 py-3 rounded-xl bg-primary text-primary-foreground font-bold text-sm flex items-center gap-1.5 pos-btn shadow-md">
                   <Plus className="w-4 h-4" /> Ekle
                 </button>
               </div>
@@ -111,7 +110,7 @@ export default function RestoranAdmin() {
                       <p className="text-primary font-black text-sm">{item.price} ₺</p>
                       <p className="text-xs text-muted-foreground">{categories.find(c => c.id === item.categoryId)?.name}</p>
                     </div>
-                    <button onClick={() => setMenuItems(prev => prev.filter(i => i.id !== item.id))} className="p-2.5 text-destructive hover:bg-destructive/10 rounded-xl pos-btn">
+                    <button onClick={() => removeMenuItem(item.id)} className="p-2.5 text-destructive hover:bg-destructive/10 rounded-xl pos-btn">
                       <Trash2 className="w-4 h-4" />
                     </button>
                   </div>
@@ -126,7 +125,7 @@ export default function RestoranAdmin() {
               <div className="flex gap-2 mb-6">
                 <input value={newCategoryIcon} onChange={e => setNewCategoryIcon(e.target.value)} placeholder="Emoji (ör: 🥩)" className="px-4 py-3 rounded-xl border bg-card text-sm w-24" />
                 <input value={newCategoryName} onChange={e => setNewCategoryName(e.target.value)} placeholder="Kategori adı" className="px-4 py-3 rounded-xl border bg-card text-sm flex-1" />
-                <button onClick={addCategory} className="px-5 py-3 rounded-xl bg-primary text-primary-foreground font-bold text-sm flex items-center gap-1.5 pos-btn shadow-md">
+                <button onClick={handleAddCategory} className="px-5 py-3 rounded-xl bg-primary text-primary-foreground font-bold text-sm flex items-center gap-1.5 pos-btn shadow-md">
                   <Plus className="w-4 h-4" /> Ekle
                 </button>
               </div>
@@ -134,7 +133,7 @@ export default function RestoranAdmin() {
                 {categories.map(c => (
                   <div key={c.id} className="flex items-center justify-between p-4 bg-card rounded-xl border">
                     <span className="font-bold flex items-center gap-2">{c.icon} {c.name}</span>
-                    <button onClick={() => setCategories(prev => prev.filter(x => x.id !== c.id))} className="p-2.5 text-destructive hover:bg-destructive/10 rounded-xl pos-btn">
+                    <button onClick={() => removeCategory(c.id)} className="p-2.5 text-destructive hover:bg-destructive/10 rounded-xl pos-btn">
                       <Trash2 className="w-4 h-4" />
                     </button>
                   </div>
@@ -151,7 +150,7 @@ export default function RestoranAdmin() {
                 <select value={newTableFloor} onChange={e => setNewTableFloor(e.target.value)} className="px-4 py-3 rounded-xl border bg-card text-sm">
                   {floors.map(f => <option key={f} value={f}>{f}</option>)}
                 </select>
-                <button onClick={addTable} className="px-5 py-3 rounded-xl bg-primary text-primary-foreground font-bold text-sm flex items-center gap-1.5 pos-btn shadow-md">
+                <button onClick={handleAddTable} className="px-5 py-3 rounded-xl bg-primary text-primary-foreground font-bold text-sm flex items-center gap-1.5 pos-btn shadow-md">
                   <Plus className="w-4 h-4" /> Ekle
                 </button>
               </div>
@@ -165,7 +164,7 @@ export default function RestoranAdmin() {
                         <p className="text-[10px] text-muted-foreground">{t.floor}</p>
                       </div>
                     </div>
-                    <button onClick={() => setTables(prev => prev.filter(x => x.id !== t.id))} className="p-2.5 text-destructive hover:bg-destructive/10 rounded-xl pos-btn">
+                    <button onClick={() => removeTable(t.id)} className="p-2.5 text-destructive hover:bg-destructive/10 rounded-xl pos-btn">
                       <Trash2 className="w-4 h-4" />
                     </button>
                   </div>
