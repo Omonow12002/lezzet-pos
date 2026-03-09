@@ -32,9 +32,9 @@ interface POSContextType {
   floors: string[];
   // Staff management (admin CRUD)
   staff: Staff[];
-  addStaff: (s: Omit<Staff, 'id'>) => void;
-  removeStaff: (id: string) => void;
-  updateStaff: (id: string, updates: Partial<Staff>) => void;
+  addStaff: (s: Omit<Staff, 'id'>) => Promise<void>;
+  removeStaff: (id: string) => Promise<void>;
+  updateStaff: (id: string, updates: Partial<Staff>) => Promise<void>;
   // Admin CRUD
   addCategory: (cat: Omit<Category, 'id'>) => void;
   removeCategory: (id: string) => void;
@@ -574,31 +574,32 @@ export function POSProvider({ restaurantId, staffId, children }: POSProviderProp
 
   // ─── Staff CRUD (for admin panel) ──────────────
 
-  const addStaff = useCallback((s: Omit<Staff, 'id'>) => {
+  const addStaff = useCallback(async (s: Omit<Staff, 'id'>) => {
     const id = crypto.randomUUID();
-    setStaff(prev => [...prev, { ...s, id }]);
-    supabase.from('staff').insert({
+    const { error } = await supabase.from('staff').insert({
       id, restaurant_id: s.restaurantId, name: s.name, role: s.role, pin: s.pin, active: s.active,
-    }).then(({ error }) => { if (error) console.error('addStaff error:', error); });
+    });
+    if (error) { console.error('addStaff error:', error); throw error; }
+    setStaff(prev => [...prev, { ...s, id }]);
   }, []);
 
-  const removeStaff = useCallback((id: string) => {
+  const removeStaff = useCallback(async (id: string) => {
+    const { error } = await supabase.from('staff').update({ active: false }).eq('id', id);
+    if (error) { console.error('removeStaff error:', error); throw error; }
     setStaff(prev => prev.filter(s => s.id !== id));
-    supabase.from('staff').update({ active: false }).eq('id', id)
-      .then(({ error }) => { if (error) console.error('removeStaff error:', error); });
   }, []);
 
-  const updateStaffFn = useCallback((id: string, updates: Partial<Staff>) => {
-    setStaff(prev => prev.map(s => s.id === id ? { ...s, ...updates } : s));
+  const updateStaffFn = useCallback(async (id: string, updates: Partial<Staff>) => {
     const dbUpdates: Record<string, unknown> = {};
     if (updates.name !== undefined) dbUpdates.name = updates.name;
     if (updates.role !== undefined) dbUpdates.role = updates.role;
     if (updates.pin !== undefined) dbUpdates.pin = updates.pin;
     if (updates.active !== undefined) dbUpdates.active = updates.active;
     if (Object.keys(dbUpdates).length > 0) {
-      supabase.from('staff').update(dbUpdates).eq('id', id)
-        .then(({ error }) => { if (error) console.error('updateStaff error:', error); });
+      const { error } = await supabase.from('staff').update(dbUpdates).eq('id', id);
+      if (error) { console.error('updateStaff error:', error); throw error; }
     }
+    setStaff(prev => prev.map(s => s.id === id ? { ...s, ...updates } : s));
   }, []);
 
   // ─── Daily Closure ─────────────────────────────

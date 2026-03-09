@@ -118,19 +118,24 @@ export default function RestoranAdmin() {
     toast.success('Kat eklendi');
   };
 
-  const handleAddStaff = () => {
+  const handleAddStaff = async () => {
     if (!staffForm.name || !staffForm.pin) return;
     if (staffForm.pin.length < 4) { toast.error('PIN en az 4 haneli olmali'); return; }
-    addStaff({
-      restaurantId,
-      name: staffForm.name,
-      role: staffForm.role as Staff['role'],
-      pin: staffForm.pin,
-      active: true,
-    });
-    setShowStaffDialog(false);
-    setStaffForm({ name: '', role: 'garson', pin: '' });
-    toast.success('Personel eklendi');
+    try {
+      await addStaff({
+        restaurantId,
+        name: staffForm.name,
+        role: staffForm.role as Staff['role'],
+        pin: staffForm.pin,
+        active: true,
+      });
+      setShowStaffDialog(false);
+      setStaffForm({ name: '', role: 'garson', pin: '' });
+      toast.success('Personel eklendi');
+    } catch (err: unknown) {
+      const msg = err && typeof err === 'object' && 'message' in err ? (err as Error).message : String(err);
+      toast.error('Personel eklenemedi: ' + msg);
+    }
   };
 
   const handleLogout = () => {

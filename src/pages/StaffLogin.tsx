@@ -51,15 +51,6 @@ export default function StaffLogin() {
 
       const r = data[0] as { id: string; name: string };
       setRestaurant(r);
-
-      // Check if staff exist
-      const { count } = await supabase
-        .from('staff')
-        .select('id', { count: 'exact', head: true })
-        .eq('restaurant_id', r.id)
-        .eq('active', true);
-
-      if (count === 0) setNoStaff(true);
       setResolving(false);
     })();
   }, [slug]);
