@@ -49,7 +49,7 @@ export default function SuperAdmin() {
     })();
   }, []);
 
-  // ── Create restaurant + owner ──
+  // ── Create restaurant + owner (atomic) ──
   const handleCreate = async () => {
     if (!form.name || !form.slug || !form.ownerEmail || !form.ownerPassword) {
       toast.error('Gerekli alanlar: Ad, Slug, Sahibi Email, Sifre');
@@ -61,44 +61,28 @@ export default function SuperAdmin() {
     }
     setSaving(true);
     try {
-      const id = crypto.randomUUID();
-
-      // 1) Insert restaurant
-      const { error: rErr } = await supabase.from('restaurants').insert({
-        id,
-        name: form.name,
-        slug: form.slug.toLowerCase().trim(),
-        owner_name: form.ownerName || null,
-        phone: form.phone || null,
-        address: form.address || null,
-        license_plan: form.licensePlan,
-        active: true,
+      const { data: newId, error } = await supabase.rpc('create_restaurant_with_admin', {
+        p_name: form.name,
+        p_slug: form.slug.toLowerCase().trim(),
+        p_owner_name: form.ownerName || form.name,
+        p_phone: form.phone || '',
+        p_address: form.address || '',
+        p_email: form.ownerEmail,
+        p_password: form.ownerPassword,
+        p_plan: form.licensePlan,
       });
 
-      if (rErr) {
-        if (rErr.code === '23505') toast.error('Bu slug zaten kullaniliyor');
-        else toast.error('Restoran olusturulamadi');
+      if (error) {
+        if (error.message?.includes('duplicate') || error.message?.includes('unique')) {
+          toast.error('Bu slug veya email zaten kullaniliyor');
+        } else {
+          toast.error('Restoran olusturulamadi: ' + error.message);
+        }
         return;
       }
 
-      // 2) Create platform_user for restaurant owner
-      const { error: uErr } = await supabase.rpc('create_platform_user', {
-        p_email: form.ownerEmail,
-        p_password: form.ownerPassword,
-        p_name: form.ownerName || form.name,
-        p_role: 'restoran_admin',
-        p_restaurant_id: id,
-      });
-
-      if (uErr) {
-        if (uErr.message?.includes('duplicate')) toast.error('Bu email zaten kayitli');
-        else toast.error('Sahip hesabi olusturulamadi');
-        // Still restaurant was created, owner can be added later
-      }
-
-      // Add to local state
       setRestaurants(prev => [{
-        id, name: form.name, slug: form.slug, ownerName: form.ownerName, ownerEmail: form.ownerEmail,
+        id: newId, name: form.name, slug: form.slug, ownerName: form.ownerName, ownerEmail: form.ownerEmail,
         phone: form.phone, address: form.address, licensePlan: form.licensePlan,
         active: true, createdAt: new Date(),
       }, ...prev]);

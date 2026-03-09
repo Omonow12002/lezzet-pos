@@ -90,34 +90,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const loginWithPin = useCallback(async (pin: string, restaurantId: string): Promise<LoginResult> => {
     setLoading(true);
     try {
-      // Check if any active staff exist for this restaurant
-      const { count } = await supabase
-        .from('staff')
-        .select('id', { count: 'exact', head: true })
-        .eq('restaurant_id', restaurantId)
-        .eq('active', true);
+      const { data, error } = await supabase.rpc('verify_staff_pin', {
+        p_pin: pin,
+        p_restaurant_id: restaurantId,
+      });
 
-      if (count === 0) {
-        return { success: false, error: 'no_staff' };
+      if (error) {
+        return { success: false, error: 'Bir hata oluştu. Tekrar deneyin.' };
       }
 
-      // Lookup by PIN
-      const { data } = await supabase
-        .from('staff')
-        .select('*')
-        .eq('restaurant_id', restaurantId)
-        .eq('pin', pin)
-        .limit(1);
+      const rows = data as { id: string; name: string; role: string; restaurant_id: string; active: boolean }[];
 
-      if (!data || data.length === 0) {
+      if (!rows || rows.length === 0) {
         return { success: false, error: 'Geçersiz PIN' };
       }
 
-      const staff = data[0] as { id: string; name: string; role: string; active: boolean };
-
-      if (!staff.active) {
-        return { success: false, error: 'Hesap aktif değil' };
-      }
+      const staff = rows[0];
 
       const newSession: AuthSession = {
         type: 'staff',
