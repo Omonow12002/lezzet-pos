@@ -12,7 +12,7 @@ export default function AdminLogin() {
 
   // Auto-redirect if already logged in as admin
   if (session?.type === 'admin') {
-    const path = session.role === 'super_admin' ? '/super-admin' : '/admin';
+    const path = session.role === 'super_admin' ? '/admin/dashboard' : `/pos/${session.slug}/dashboard`;
     navigate(path, { replace: true });
     return null;
   }
@@ -32,7 +32,7 @@ export default function AdminLogin() {
       const raw = localStorage.getItem('auth_session');
       if (raw) {
         const s = JSON.parse(raw);
-        const path = s.role === 'super_admin' ? '/super-admin' : '/admin';
+        const path = s.role === 'super_admin' ? '/admin/dashboard' : `/pos/${s.slug}/dashboard`;
         toast.success(`Hoş geldiniz, ${s.name}!`);
         navigate(path);
       }
@@ -92,7 +92,7 @@ export default function AdminLogin() {
       </form>
 
       <button
-        onClick={() => navigate('/')}
+        onClick={() => navigate('/pos')}
         className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
       >
         <ArrowLeft className="w-4 h-4" /> Geri

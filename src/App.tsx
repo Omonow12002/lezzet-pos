@@ -2,11 +2,11 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, ProtectedRoute } from "@/context/AuthContext";
 import { useAuth } from "@/context/AuthContext";
 import { POSProvider } from "@/context/POSContext";
-import RoleSelection from "./pages/RoleSelection";
+import POSEntry from "./pages/POSEntry";
 import AdminLogin from "./pages/AdminLogin";
 import StaffLogin from "./pages/StaffLogin";
 import GarsonPOS from "./pages/GarsonPOS";
@@ -37,25 +37,26 @@ const App = () => (
       <BrowserRouter>
         <AuthProvider>
           <Routes>
-            <Route path="/" element={<RoleSelection />} />
-            <Route path="/login" element={<AdminLogin />} />
+            <Route path="/" element={<Navigate to="/pos" replace />} />
+            <Route path="/pos" element={<POSEntry />} />
+            <Route path="/admin/login" element={<AdminLogin />} />
             <Route path="/pos/:slug" element={<StaffLogin />} />
-            <Route path="/super-admin" element={
+            <Route path="/admin/dashboard" element={
               <ProtectedRoute allowedRoles={['super_admin']}>
                 <SuperAdmin />
               </ProtectedRoute>
             } />
-            <Route path="/admin" element={
+            <Route path="/pos/:slug/dashboard" element={
               <ProtectedRoute allowedRoles={['restoran_admin']}>
                 <POSLayout><RestoranAdmin /></POSLayout>
               </ProtectedRoute>
             } />
-            <Route path="/garson" element={
+            <Route path="/pos/:slug/tables" element={
               <ProtectedRoute allowedRoles={['garson', 'manager']}>
                 <POSLayout><GarsonPOS /></POSLayout>
               </ProtectedRoute>
             } />
-            <Route path="/mutfak" element={
+            <Route path="/pos/:slug/kitchen" element={
               <ProtectedRoute allowedRoles={['mutfak']}>
                 <POSLayout><MutfakEkrani /></POSLayout>
               </ProtectedRoute>

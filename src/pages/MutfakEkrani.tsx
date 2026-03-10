@@ -73,7 +73,7 @@ export default function MutfakEkrani() {
   return (
     <div className="h-screen flex flex-col overflow-hidden bg-background">
       <header className="flex items-center gap-3 px-4 py-3 bg-card border-b shrink-0">
-        <button onClick={() => { logout(); navigate('/'); }} className="p-2 rounded-lg hover:bg-muted pos-btn" title="Çıkış">
+        <button onClick={() => { const s = (JSON.parse(localStorage.getItem('auth_session') || '{}')).slug || ''; logout(); navigate(`/pos/${s}`); }} className="p-2 rounded-lg hover:bg-muted pos-btn" title="Çıkış">
           <LogOut className="w-5 h-5" />
         </button>
         <ChefHat className="w-6 h-6 text-primary" />

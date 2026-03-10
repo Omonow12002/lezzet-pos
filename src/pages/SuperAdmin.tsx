@@ -111,12 +111,12 @@ export default function SuperAdmin() {
   };
 
   // ── Logout ──
-  const handleLogout = () => { logout(); navigate('/'); };
+  const handleLogout = () => { logout(); navigate('/admin/login'); };
 
   return (
     <div className="h-screen flex flex-col overflow-hidden">
       <header className="flex items-center gap-3 px-4 py-3 bg-card border-b shrink-0">
-        <button onClick={() => navigate('/')} className="p-2 rounded-lg hover:bg-muted active:scale-95 transition-all">
+        <button onClick={() => navigate('/admin/login')} className="p-2 rounded-lg hover:bg-muted active:scale-95 transition-all">
           <ArrowLeft className="w-5 h-5" />
         </button>
         <h1 className="text-xl font-bold">Super Admin</h1>

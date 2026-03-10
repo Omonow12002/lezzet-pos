@@ -158,15 +158,17 @@ export default function RestoranAdmin() {
     }
   };
 
+  const sessionSlug = session?.type === 'admin' ? session.slug : (session?.type === 'staff' ? session.slug : '');
+
   const handleLogout = () => {
     logout();
-    navigate('/');
+    navigate(`/pos/${sessionSlug}`);
   };
 
   return (
     <div className="h-screen flex flex-col overflow-hidden bg-background">
       <header className="flex items-center gap-3 px-4 py-3 bg-card border-b shrink-0">
-        <button onClick={() => navigate('/')} className="p-2 rounded-lg hover:bg-muted pos-btn">
+        <button onClick={handleLogout} className="p-2 rounded-lg hover:bg-muted pos-btn">
           <ArrowLeft className="w-5 h-5" />
         </button>
         <Store className="w-5 h-5 text-primary" />

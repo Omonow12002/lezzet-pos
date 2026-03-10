@@ -16,8 +16,8 @@ export interface PlatformUser {
 }
 
 export type AuthSession =
-  | { type: 'admin'; userId: string; email: string; name: string; role: 'super_admin' | 'restoran_admin'; restaurantId: string | null }
-  | { type: 'staff'; staffId: string; name: string; role: 'garson' | 'mutfak' | 'manager'; restaurantId: string };
+  | { type: 'admin'; userId: string; email: string; name: string; role: 'super_admin' | 'restoran_admin'; restaurantId: string | null; slug?: string }
+  | { type: 'staff'; staffId: string; name: string; role: 'garson' | 'mutfak' | 'manager'; restaurantId: string; slug: string };
 
 export interface MenuItem {
   id: string;

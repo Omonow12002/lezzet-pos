@@ -315,7 +315,7 @@ export default function GarsonPOS() {
     <div className="h-screen flex flex-col overflow-hidden bg-background">
       {/* Compact Header */}
       <header className="flex items-center gap-2 px-3 py-2 bg-card border-b shrink-0">
-        <button onClick={() => navigate('/')} className="p-2 rounded-lg hover:bg-muted pos-btn">
+        <button onClick={() => { logout(); navigate(`/pos/${session?.type === 'staff' ? session.slug : ''}`); }} className="p-2 rounded-lg hover:bg-muted pos-btn">
           <ArrowLeft className="w-5 h-5" />
         </button>
         <h1 className="text-lg font-bold">Garson POS</h1>
@@ -331,7 +331,7 @@ export default function GarsonPOS() {
           </div>
         )}
         {!selectedTable && (
-          <button onClick={() => { logout(); navigate('/'); }} className="ml-auto p-2 rounded-lg hover:bg-muted pos-btn" title="Cikis">
+          <button onClick={() => { logout(); navigate(`/pos/${session?.type === 'staff' ? session.slug : ''}`); }} className="ml-auto p-2 rounded-lg hover:bg-muted pos-btn" title="Cikis">
             <LogOut className="w-4 h-4" />
           </button>
         )}

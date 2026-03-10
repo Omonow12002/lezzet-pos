@@ -30,7 +30,7 @@ interface AuthContextType {
   session: AuthSession | null;
   loading: boolean;
   loginWithEmail: (email: string, password: string) => Promise<LoginResult>;
-  loginWithPin: (pin: string, restaurantId: string) => Promise<LoginResult>;
+  loginWithPin: (pin: string, restaurantId: string, slug: string) => Promise<LoginResult>;
   logout: () => void;
 }
 
@@ -68,6 +68,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return { success: false, error: 'Hesap aktif değil' };
       }
 
+      // Resolve slug for restoran_admin
+      let slug: string | undefined;
+      if (user.role === 'restoran_admin' && user.restaurant_id) {
+        const { data: rData } = await supabase
+          .from('restaurants')
+          .select('slug')
+          .eq('id', user.restaurant_id)
+          .limit(1);
+        if (rData && rData.length > 0) slug = rData[0].slug;
+      }
+
       const newSession: AuthSession = {
         type: 'admin',
         userId: user.id,
@@ -75,6 +86,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         name: user.name,
         role: user.role as 'super_admin' | 'restoran_admin',
         restaurantId: user.restaurant_id,
+        slug,
       };
 
       setSession(newSession);
@@ -87,7 +99,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   // ── PIN Login ──────────────────────────────
 
-  const loginWithPin = useCallback(async (pin: string, restaurantId: string): Promise<LoginResult> => {
+  const loginWithPin = useCallback(async (pin: string, restaurantId: string, slug: string): Promise<LoginResult> => {
     setLoading(true);
     try {
       const { data, error } = await supabase.rpc('verify_staff_pin', {
@@ -113,6 +125,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         name: staff.name,
         role: staff.role as 'garson' | 'mutfak' | 'manager',
         restaurantId,
+        slug,
       };
 
       setSession(newSession);
@@ -153,9 +166,9 @@ export function ProtectedRoute({ allowedRoles, children }: { allowedRoles: strin
 
   useEffect(() => {
     if (!session) {
-      navigate('/', { replace: true });
+      navigate('/pos', { replace: true });
     } else if (!allowedRoles.includes(session.role)) {
-      navigate('/', { replace: true });
+      navigate('/pos', { replace: true });
     }
   }, [session, allowedRoles, navigate]);
 

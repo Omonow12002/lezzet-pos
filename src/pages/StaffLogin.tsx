@@ -5,12 +5,19 @@ import { supabase } from '@/lib/supabase';
 import { LogIn, Loader2, ArrowLeft } from 'lucide-react';
 import { toast } from 'sonner';
 
-const rolePaths: Record<string, string> = {
-  garson: '/garson',
-  mutfak: '/mutfak',
-  manager: '/garson',
-  restoran_admin: '/admin',
-};
+function getRolePath(slug: string, role: string): string {
+  switch (role) {
+    case 'garson':
+    case 'manager':
+      return `/pos/${slug}/tables`;
+    case 'mutfak':
+      return `/pos/${slug}/kitchen`;
+    case 'restoran_admin':
+      return `/pos/${slug}/dashboard`;
+    default:
+      return `/pos/${slug}`;
+  }
+}
 
 export default function StaffLogin() {
   const { slug } = useParams<{ slug: string }>();
@@ -25,11 +32,10 @@ export default function StaffLogin() {
 
   // Auto-redirect if already logged in
   useEffect(() => {
-    if (session) {
-      const path = rolePaths[session.role] || '/';
-      navigate(path, { replace: true });
+    if (session && slug) {
+      navigate(getRolePath(slug, session.role), { replace: true });
     }
-  }, [session, navigate]);
+  }, [session, slug, navigate]);
 
   // Resolve restaurant slug
   useEffect(() => {
@@ -58,13 +64,13 @@ export default function StaffLogin() {
   const handlePinLogin = async () => {
     if (!restaurant || pin.length < 4) return;
 
-    const result = await loginWithPin(pin, restaurant.id);
+    const result = await loginWithPin(pin, restaurant.id, slug!);
     if (result.success) {
       const raw = localStorage.getItem('auth_session');
       if (raw) {
         const s = JSON.parse(raw);
         toast.success(`Hos geldiniz, ${s.name}!`);
-        navigate(rolePaths[s.role] || '/');
+        navigate(getRolePath(slug!, s.role));
       }
     } else if (result.error === 'no_staff') {
       setNoStaff(true);
@@ -100,7 +106,7 @@ export default function StaffLogin() {
       <div className="min-h-screen flex flex-col items-center justify-center gap-6 p-6 bg-background">
         <h1 className="text-2xl font-black">Restoran bulunamadi</h1>
         <p className="text-muted-foreground">Girdiginiz adres gecerli bir restorana ait degil.</p>
-        <button onClick={() => navigate('/')} className="flex items-center gap-2 text-sm text-primary font-semibold">
+        <button onClick={() => navigate('/pos')} className="flex items-center gap-2 text-sm text-primary font-semibold">
           <ArrowLeft className="w-4 h-4" /> Ana Sayfa
         </button>
       </div>
@@ -116,7 +122,7 @@ export default function StaffLogin() {
           <p className="text-muted-foreground">Personel hesabi bulunamadi.</p>
           <p className="text-muted-foreground mt-1">Lutfen yonetici ile iletisime gecin.</p>
         </div>
-        <button onClick={() => navigate('/')} className="flex items-center gap-2 text-sm text-primary font-semibold">
+        <button onClick={() => navigate('/pos')} className="flex items-center gap-2 text-sm text-primary font-semibold">
           <ArrowLeft className="w-4 h-4" /> Ana Sayfa
         </button>
       </div>
@@ -185,7 +191,7 @@ export default function StaffLogin() {
       </div>
 
       <button
-        onClick={() => navigate('/')}
+        onClick={() => navigate('/pos')}
         className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
       >
         <ArrowLeft className="w-4 h-4" /> Ana Sayfa
