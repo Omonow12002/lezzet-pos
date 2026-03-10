@@ -59,6 +59,8 @@ interface POSContextType {
   addModifierOption: (groupId: string, option: { name: string; extraPrice: number }) => Promise<string>;
   updateModifierOption: (id: string, groupId: string, updates: { name?: string; extraPrice?: number }) => Promise<void>;
   removeModifierOption: (id: string, groupId: string) => Promise<void>;
+  // Refetch
+  refetchOrders: () => Promise<void>;
 }
 
 const POSContext = createContext<POSContextType | null>(null);
@@ -289,12 +291,59 @@ export function POSProvider({ restaurantId, staffId, children }: POSProviderProp
     return () => { cancelled = true; };
   }, [restaurantId]);
 
+  // ─── Refetch Orders (polling fallback) ────────
+
+  const refetchOrders = useCallback(async () => {
+    const rid = restaurantId;
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    const [{ data: ordersData }, { data: orderItemsData }, { data: paymentsData }] = await Promise.all([
+      supabase.from('orders').select('*').eq('restaurant_id', rid).or(`status.neq.tamamlandi,created_at.gte.${todayStart.toISOString()}`),
+      supabase.from('order_items').select('*'),
+      supabase.from('payments').select('*'),
+    ]);
+    const itemsByOrder = new Map<string, OrderItem[]>();
+    (orderItemsData || []).forEach((oi: Record<string, unknown>) => {
+      const oid = oi.order_id as string;
+      const arr = itemsByOrder.get(oid) || [];
+      arr.push(mapOrderItem(oi));
+      itemsByOrder.set(oid, arr);
+    });
+    const paymentsByOrder = new Map<string, Payment[]>();
+    (paymentsData || []).forEach((p: Record<string, unknown>) => {
+      const oid = p.order_id as string;
+      const arr = paymentsByOrder.get(oid) || [];
+      arr.push(mapPayment(p));
+      paymentsByOrder.set(oid, arr);
+    });
+    setOrders((ordersData || []).map((o: Record<string, unknown>): Order => ({
+      id: o.id as string,
+      tableId: o.table_id as string,
+      tableName: o.table_name as string,
+      items: itemsByOrder.get(o.id as string) || [],
+      status: o.status as OrderStatus,
+      createdAt: new Date(o.created_at as string),
+      total: Number(o.total),
+      payments: paymentsByOrder.get(o.id as string),
+      prepayment: o.prepayment ? Number(o.prepayment) : undefined,
+      restaurantId: (o.restaurant_id as string) || undefined,
+      staffId: (o.staff_id as string) || undefined,
+    })));
+  }, [restaurantId]);
+
+  // ─── Polling Fallback (every 30s) ──────────────
+
+  useEffect(() => {
+    const interval = setInterval(refetchOrders, 30000);
+    return () => clearInterval(interval);
+  }, [refetchOrders]);
+
   // ─── Realtime Subscriptions ────────────────────
 
   useEffect(() => {
     const channel = supabase
-      .channel('pos-realtime')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'categories' }, (payload) => {
+      .channel(`pos-realtime-${restaurantId}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'categories', filter: `restaurant_id=eq.${restaurantId}` }, (payload) => {
         if (payload.eventType === 'INSERT') {
           setCategories(prev => prev.some(c => c.id === payload.new.id) ? prev : [...prev, mapCategory(payload.new)]);
         } else if (payload.eventType === 'UPDATE') {
@@ -303,7 +352,7 @@ export function POSProvider({ restaurantId, staffId, children }: POSProviderProp
           setCategories(prev => prev.filter(c => c.id !== payload.old.id));
         }
       })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'menu_items' }, (payload) => {
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'menu_items', filter: `restaurant_id=eq.${restaurantId}` }, (payload) => {
         if (payload.eventType === 'INSERT') {
           setMenuItems(prev => prev.some(m => m.id === payload.new.id) ? prev : [...prev, mapMenuItem(payload.new)]);
         } else if (payload.eventType === 'UPDATE') {
@@ -316,7 +365,7 @@ export function POSProvider({ restaurantId, staffId, children }: POSProviderProp
           setMenuItems(prev => prev.filter(m => m.id !== payload.old.id));
         }
       })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'tables' }, (payload) => {
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'tables', filter: `restaurant_id=eq.${restaurantId}` }, (payload) => {
         const fMap = floorMapRef.current;
         if (payload.eventType === 'INSERT') {
           setTables(prev => prev.some(t => t.id === payload.new.id) ? prev : [...prev, mapTable(payload.new, fMap)]);
@@ -326,7 +375,7 @@ export function POSProvider({ restaurantId, staffId, children }: POSProviderProp
           setTables(prev => prev.filter(t => t.id !== payload.old.id));
         }
       })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, (payload) => {
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'orders', filter: `restaurant_id=eq.${restaurantId}` }, (payload) => {
         if (payload.eventType === 'INSERT') {
           setOrders(prev => {
             if (prev.some(o => o.id === payload.new.id)) return prev;
@@ -372,10 +421,16 @@ export function POSProvider({ restaurantId, staffId, children }: POSProviderProp
           return { ...o, payments: [...existing, newPayment] };
         }));
       })
-      .subscribe();
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED') {
+          console.log('[POS Realtime] Connected for', restaurantId);
+        } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+          console.warn('[POS Realtime] Subscription issue:', status, '— polling fallback active');
+        }
+      });
 
     return () => { supabase.removeChannel(channel); };
-  }, []);
+  }, [restaurantId]);
 
   // ─── Order Functions ───────────────────────────
 
@@ -741,6 +796,7 @@ export function POSProvider({ restaurantId, staffId, children }: POSProviderProp
       productModifierMap, setProductModifiers,
       addModifierGroup, updateModifierGroup, removeModifierGroup,
       addModifierOption, updateModifierOption, removeModifierOption,
+      refetchOrders,
     }}>
       {loading ? (
         <div className="h-screen flex items-center justify-center bg-background">

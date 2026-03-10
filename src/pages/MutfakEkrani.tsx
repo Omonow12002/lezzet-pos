@@ -70,7 +70,7 @@ function OrderCard({ order, onStatusChange }: { order: Order; onStatusChange: (s
 }
 
 export default function MutfakEkrani() {
-  const { orders, updateOrderStatus } = usePOS();
+  const { orders, updateOrderStatus, refetchOrders } = usePOS();
   const { logout } = useAuth();
   const navigate = useNavigate();
   const newCount = orders.filter(o => o.status === 'yeni').length;
@@ -83,6 +83,15 @@ export default function MutfakEkrani() {
     }
     prevNewCount.current = newCount;
   }, [newCount]);
+
+  // Refetch orders when kitchen tab becomes visible (catches missed realtime events)
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') refetchOrders();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
+  }, [refetchOrders]);
 
   return (
     <div className="h-screen flex flex-col overflow-hidden bg-background">
