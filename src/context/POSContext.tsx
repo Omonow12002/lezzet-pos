@@ -500,7 +500,7 @@ export function POSProvider({ restaurantId, staffId, children }: POSProviderProp
     const id = crypto.randomUUID();
     const { error } = await supabase.from('menu_items').insert({
       id, name: item.name, description: item.description || null, price: item.price,
-      category_id: item.categoryId, has_modifiers: item.hasModifiers || false, image: item.image || null,
+      category_id: item.categoryId, image: item.image || null,
       portion_info: item.portionInfo || null, allergen_info: item.allergenInfo || null,
       spice_level: item.spiceLevel || 0, ingredients: item.ingredients || [],
       kitchen_note: item.kitchenNote || null, restaurant_id: restaurantId,
@@ -516,7 +516,6 @@ export function POSProvider({ restaurantId, staffId, children }: POSProviderProp
     if (updates.description !== undefined) dbUpdates.description = updates.description || null;
     if (updates.price !== undefined) dbUpdates.price = updates.price;
     if (updates.categoryId !== undefined) dbUpdates.category_id = updates.categoryId;
-    if (updates.hasModifiers !== undefined) dbUpdates.has_modifiers = updates.hasModifiers;
     if (updates.image !== undefined) dbUpdates.image = updates.image || null;
     if (updates.portionInfo !== undefined) dbUpdates.portion_info = updates.portionInfo || null;
     if (updates.allergenInfo !== undefined) dbUpdates.allergen_info = updates.allergenInfo || null;

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
 import { ArrowRight, Shield, Store } from 'lucide-react';
@@ -24,18 +24,16 @@ export default function POSEntry() {
   const navigate = useNavigate();
   const [slug, setSlug] = useState('');
 
-  // Auto-redirect if already logged in
-  if (session) {
+  // Auto-redirect if already logged in (must be in useEffect, not during render)
+  useEffect(() => {
+    if (!session) return;
     const s = session.type === 'staff' ? session.slug : (session.slug || '');
     if (s) {
       navigate(getRolePath(s, session.role), { replace: true });
-      return null;
-    }
-    if (session.role === 'super_admin') {
+    } else if (session.role === 'super_admin') {
       navigate('/admin/dashboard', { replace: true });
-      return null;
     }
-  }
+  }, [session, navigate]);
 
   const handleGo = () => {
     const clean = slug.trim().toLowerCase().replace(/[^a-z0-9-]/g, '');
