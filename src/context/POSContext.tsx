@@ -11,6 +11,7 @@ import {
 interface POSContextType {
   loading: boolean;
   restaurantId: string;
+  restaurantName: string;
   staffId: string | null;
   categories: Category[];
   setCategories: React.Dispatch<React.SetStateAction<Category[]>>;
@@ -162,6 +163,7 @@ export function POSProvider({ restaurantId, staffId, children }: POSProviderProp
   const [floors, setFloors] = useState<string[]>([]);
   const [staff, setStaff] = useState<Staff[]>([]);
   const [productModifierMap, setProductModifierMap] = useState<Map<string, string[]>>(new Map());
+  const [restaurantName, setRestaurantName] = useState('');
 
   const floorMapRef = useRef(new Map<string, string>());
   const reverseFloorMapRef = useRef(new Map<string, string>());
@@ -176,6 +178,8 @@ export function POSProvider({ restaurantId, staffId, children }: POSProviderProp
     async function fetchAll() {
       try {
         const rid = restaurantId;
+        const todayStart = new Date();
+        todayStart.setHours(0, 0, 0, 0);
         const [
           { data: floorsData },
           { data: catData },
@@ -187,20 +191,25 @@ export function POSProvider({ restaurantId, staffId, children }: POSProviderProp
           { data: paymentsData },
           { data: staffData },
           { data: pmgData },
+          { data: restData },
         ] = await Promise.all([
           supabase.from('floors').select('*').eq('restaurant_id', rid).order('sort_order'),
           supabase.from('categories').select('*').eq('restaurant_id', rid).order('sort_order'),
           supabase.from('menu_items').select('*').eq('restaurant_id', rid).eq('active', true),
           supabase.from('tables').select('*').eq('restaurant_id', rid),
           supabase.from('modifier_groups').select('*, modifier_options(*)').eq('restaurant_id', rid).order('sort_order'),
-          supabase.from('orders').select('*').eq('restaurant_id', rid).neq('status', 'tamamlandi'),
+          supabase.from('orders').select('*').eq('restaurant_id', rid).or(`status.neq.tamamlandi,created_at.gte.${todayStart.toISOString()}`),
           supabase.from('order_items').select('*'),
           supabase.from('payments').select('*'),
           supabase.from('staff').select('*').eq('restaurant_id', rid).eq('active', true),
           supabase.from('product_modifier_groups').select('*'),
+          supabase.from('restaurants').select('name').eq('id', rid).single(),
         ]);
 
         if (cancelled) return;
+
+        // Restaurant name
+        if (restData) setRestaurantName((restData as { name: string }).name);
 
         // Floors
         const fMap = new Map<string, string>();
@@ -431,7 +440,7 @@ export function POSProvider({ restaurantId, staffId, children }: POSProviderProp
   }, []);
 
   const getTableOrders = useCallback((tableId: string) => {
-    return ordersRef.current.filter(o => o.tableId === tableId);
+    return ordersRef.current.filter(o => o.tableId === tableId && o.status !== 'tamamlandi');
   }, []);
 
   // ─── Table Functions ───────────────────────────
@@ -643,7 +652,7 @@ export function POSProvider({ restaurantId, staffId, children }: POSProviderProp
   return (
     <POSContext.Provider value={{
       loading,
-      restaurantId, staffId,
+      restaurantId, restaurantName, staffId,
       categories, setCategories,
       menuItems, setMenuItems,
       tables, setTables,

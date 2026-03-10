@@ -81,7 +81,7 @@ export interface OrderItem {
   sentToKitchen?: boolean;
 }
 
-export type OrderStatus = 'yeni' | 'hazirlaniyor' | 'hazir';
+export type OrderStatus = 'yeni' | 'hazirlaniyor' | 'hazir' | 'tamamlandi';
 
 export type PaymentMethod = 'nakit' | 'kredi_karti' | 'bolunmus';
 

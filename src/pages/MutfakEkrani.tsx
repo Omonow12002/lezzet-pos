@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react';
 import { usePOS } from '@/context/POSContext';
 import { useAuth } from '@/context/AuthContext';
 import { Order, OrderStatus } from '@/types/pos';
@@ -39,6 +40,9 @@ function OrderCard({ order, onStatusChange }: { order: Order; onStatusChange: (s
                 ))}
               </div>
             )}
+            {item.note && (
+              <p className="ml-5 text-[11px] text-pos-warning font-medium italic">NOT: {item.note}</p>
+            )}
           </li>
         ))}
       </ul>
@@ -69,6 +73,29 @@ export default function MutfakEkrani() {
   const { logout } = useAuth();
   const navigate = useNavigate();
   const newCount = orders.filter(o => o.status === 'yeni').length;
+
+  // Audio notification when new orders arrive
+  const prevNewCount = useRef(newCount);
+  useEffect(() => {
+    if (newCount > prevNewCount.current) {
+      // Triple beep via Web Audio API
+      try {
+        const ctx = new AudioContext();
+        [0, 0.25, 0.5].forEach(delay => {
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          osc.frequency.value = 880;
+          osc.type = 'square';
+          gain.gain.value = 0.3;
+          osc.start(ctx.currentTime + delay);
+          osc.stop(ctx.currentTime + delay + 0.15);
+        });
+      } catch { /* AudioContext not available */ }
+    }
+    prevNewCount.current = newCount;
+  }, [newCount]);
 
   return (
     <div className="h-screen flex flex-col overflow-hidden bg-background">

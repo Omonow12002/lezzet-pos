@@ -52,29 +52,25 @@ export function formatAdisyon(data: AdisyonData): string {
   lines.push(center(data.restaurantName.toUpperCase()));
   lines.push('');
   lines.push(SEP);
-  lines.push(row('Masa:', data.tableName));
-  lines.push(row('Garson:', data.staffName));
   lines.push(row('Tarih:', fmtDate(data.date)));
   lines.push(row('Saat:', fmtTime(data.date)));
+  lines.push(row('Masa:', data.tableName));
+  lines.push(row('Garson:', data.staffName));
   lines.push(SEP);
 
   for (const item of data.items) {
-    const val = `${item.qty} x ${item.unitPrice}`;
-    if (item.name.length + val.length + 1 > W) {
-      lines.push(item.name);
+    const lineTotal = item.qty * item.unitPrice;
+    const label = `${item.qty}x ${item.name}`;
+    const val = fmtTL(lineTotal);
+    if (label.length + val.length + 1 > W) {
+      lines.push(label);
       lines.push(row('', val));
     } else {
-      lines.push(row(item.name, val));
+      lines.push(row(label, val));
     }
   }
 
   lines.push(SEP);
-
-  // FUTURE: KDV OZETI section here
-  // lines.push('KDV OZETI');
-  // for (const v of data.vatLines) { ... }
-  // lines.push(SEP);
-
   lines.push(row('TOPLAM', fmtTL(data.total)));
   lines.push('');
   lines.push(center('Tesekkur ederiz!'));

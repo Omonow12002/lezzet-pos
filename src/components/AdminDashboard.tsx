@@ -1,25 +1,17 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo } from 'react';
 import { usePOS } from '@/context/POSContext';
 import { useAuth } from '@/context/AuthContext';
-import { supabase } from '@/lib/supabase';
 import { formatGunSonu, printReceipt } from '@/lib/receipt';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { TrendingUp, ShoppingCart, Clock, Award, CreditCard, Banknote, FileText, X, Loader2, Printer } from 'lucide-react';
 import { toast } from 'sonner';
 
 export default function AdminDashboard() {
-  const { orders, tables, closeDailyReport, restaurantId } = usePOS();
+  const { orders, tables, closeDailyReport, restaurantId, restaurantName } = usePOS();
   const { session } = useAuth();
   const staffName = session?.name || null;
   const [showReceipt, setShowReceipt] = useState(false);
   const [closing, setClosing] = useState(false);
-  const [restaurantName, setRestaurantName] = useState('');
-
-  useEffect(() => {
-    if (!restaurantId) return;
-    supabase.from('restaurants').select('name').eq('id', restaurantId).single()
-      .then(({ data }) => { if (data) setRestaurantName((data as { name: string }).name); });
-  }, [restaurantId]);
 
   const buildGunSonuData = () => ({
     restaurantName: restaurantName || 'RESTORAN',
@@ -55,7 +47,8 @@ export default function AdminDashboard() {
   }, [orders]);
 
   const stats = useMemo(() => {
-    const totalRevenue = orders.reduce((sum, o) => sum + o.total, 0);
+    const totalRevenue = orders.reduce((sum, o) =>
+      sum + (o.payments || []).reduce((s, p) => s + p.amount, 0), 0);
     const totalOrders = orders.length;
 
     const cashPayments = orders.reduce((sum, o) =>

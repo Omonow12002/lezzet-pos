@@ -17,7 +17,7 @@ function formatDuration(openedAt?: Date) {
 }
 
 export default function GarsonPOS() {
-  const { tables, categories, menuItems, addOrder, getTableOrders, setTableStatus, setTableTotal, openTable, modifierGroups, floors, addPayment, orders, removeOrder, updateOrder, productModifierMap } = usePOS();
+  const { tables, categories, menuItems, addOrder, getTableOrders, setTableStatus, setTableTotal, openTable, modifierGroups, floors, addPayment, orders, removeOrder, updateOrder, updateOrderStatus, restaurantName, productModifierMap } = usePOS();
   const { session, logout } = useAuth();
   const staffName = session?.name || null;
   const navigate = useNavigate();
@@ -86,7 +86,7 @@ export default function GarsonPOS() {
   );
 
   // Calculate paid amount for current table
-  const tableOrders = selectedTable ? orders.filter(o => o.tableId === selectedTable.id) : [];
+  const tableOrders = selectedTable ? orders.filter(o => o.tableId === selectedTable.id && o.status !== 'tamamlandi') : [];
   const totalPaid = tableOrders.reduce((sum, o) => {
     return sum + (o.payments || []).reduce((s, p) => s + p.amount, 0);
   }, 0);
@@ -212,31 +212,15 @@ export default function GarsonPOS() {
   };
 
   const handleQuickCash = (amount: number) => {
-    if (tableOrders.length > 0) {
-      const payment: Payment = {
-        id: Date.now().toString(),
-        orderId: tableOrders[0].id,
-        amount,
-        method: 'nakit',
-        createdAt: new Date(),
-      };
-      addPayment(tableOrders[0].id, payment);
-    }
-    toast.success(`${amount} ₺ nakit ödeme alındı`);
-    const newPaid = totalPaid + amount;
-    if (newPaid >= total) {
-      closeTable();
-    } else {
-      setTableStatus(selectedTable!.id, 'odeme_bekliyor');
-    }
+    setPaymentConfirm({ method: 'Nakit', amount });
   };
 
   const closeTable = () => {
     if (!selectedTable) return;
     setTableStatus(selectedTable.id, 'bos');
     setTableTotal(selectedTable.id, 0);
-    // Remove all orders for this table
-    tableOrders.forEach(o => removeOrder(o.id));
+    // Mark all orders as completed (preserve for reports)
+    tableOrders.forEach(o => updateOrderStatus(o.id, 'tamamlandi'));
     setOrderItems([]);
     setSelectedTable(null);
     setShowPayment(false);
@@ -281,25 +265,6 @@ export default function GarsonPOS() {
 
     const newPaid = totalPaid + payAmount;
     if (newPaid >= total) {
-      // Auto-print adisyon on full payment
-      if (selectedTable) {
-        const items = orderItems.map(i => ({
-          name: i.menuItem.name,
-          qty: i.quantity,
-          unitPrice: i.menuItem.price + i.modifiers.reduce((s, m) => s + m.extraPrice, 0),
-        }));
-        printReceipt(
-          formatAdisyon({
-            restaurantName: 'RESTORAN',
-            tableName: selectedTable.name,
-            staffName: staffName || '',
-            date: new Date(),
-            items,
-            total,
-          }),
-          'Adisyon'
-        );
-      }
       closeTable();
     } else {
       setTableStatus(selectedTable!.id, 'odeme_bekliyor');
@@ -331,7 +296,7 @@ export default function GarsonPOS() {
     }));
     printReceipt(
       formatAdisyon({
-        restaurantName: 'RESTORAN',
+        restaurantName: restaurantName || 'RESTORAN',
         tableName: selectedTable.name,
         staffName: staffName || '',
         date: new Date(),
@@ -722,20 +687,57 @@ export default function GarsonPOS() {
         </div>
       )}
 
-      {/* Payment Confirmation Modal */}
+      {/* Payment Confirmation Modal — receipt-like */}
       {paymentConfirm && selectedTable && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60] animate-fade-in" onClick={() => setPaymentConfirm(null)}>
-          <div className="bg-card rounded-2xl w-full max-w-sm mx-4 shadow-2xl animate-slide-up overflow-hidden" onClick={e => e.stopPropagation()}>
-            <div className="p-5 text-center">
-              <Receipt className="w-12 h-12 text-primary mx-auto mb-3" />
-              <h3 className="text-lg font-black mb-2">Ödeme Onayı</h3>
-              <p className="text-sm text-muted-foreground mb-3">{selectedTable.name} için ödeme alınacak</p>
-              <p className="text-3xl font-black text-primary">{paymentConfirm.amount} ₺</p>
-              <p className="text-sm text-muted-foreground mt-1">{paymentConfirm.method}</p>
+          <div className="bg-card rounded-2xl w-full max-w-md mx-4 shadow-2xl animate-slide-up overflow-hidden max-h-[90vh] flex flex-col" onClick={e => e.stopPropagation()}>
+            <div className="p-4 border-b flex items-center justify-between shrink-0">
+              <h3 className="text-lg font-black">Ödeme Onayı</h3>
+              <div className="flex items-center gap-2">
+                <span className={`px-3 py-1 rounded-full text-xs font-bold ${
+                  paymentConfirm.method === 'Nakit' ? 'bg-pos-success/10 text-pos-success' : 'bg-pos-info/10 text-pos-info'
+                }`}>
+                  {paymentConfirm.method === 'Nakit' ? '💵' : '💳'} {paymentConfirm.method}
+                </span>
+              </div>
             </div>
-            <div className="p-4 border-t flex gap-2">
+            <div className="flex-1 overflow-y-auto p-4">
+              <pre style={{ fontFamily: "'Courier New', monospace", fontSize: 11, lineHeight: 1.5, color: '#000', whiteSpace: 'pre-wrap', background: '#fafaf8', padding: 12, borderRadius: 12, border: '1px solid #e5e2dc' }}>{formatAdisyon({
+                restaurantName: restaurantName || 'RESTORAN',
+                tableName: selectedTable.name,
+                staffName: staffName || '',
+                date: new Date(),
+                items: orderItems.map(i => ({
+                  name: i.menuItem.name,
+                  qty: i.quantity,
+                  unitPrice: i.menuItem.price + i.modifiers.reduce((s, m) => s + m.extraPrice, 0),
+                })),
+                total,
+              })}</pre>
+              <div className="mt-3 p-3 rounded-xl bg-primary/5 border border-primary/10 text-center">
+                <p className="text-sm text-muted-foreground">Ödenecek Tutar</p>
+                <p className="text-3xl font-black text-primary">{paymentConfirm.amount} ₺</p>
+              </div>
+            </div>
+            <div className="p-4 border-t flex gap-2 shrink-0">
               <button onClick={() => setPaymentConfirm(null)} className="flex-1 py-3 rounded-xl bg-muted font-semibold text-sm pos-btn">
                 İptal
+              </button>
+              <button onClick={() => {
+                printReceipt(formatAdisyon({
+                  restaurantName: restaurantName || 'RESTORAN',
+                  tableName: selectedTable.name,
+                  staffName: staffName || '',
+                  date: new Date(),
+                  items: orderItems.map(i => ({
+                    name: i.menuItem.name,
+                    qty: i.quantity,
+                    unitPrice: i.menuItem.price + i.modifiers.reduce((s, m) => s + m.extraPrice, 0),
+                  })),
+                  total,
+                }), 'Adisyon');
+              }} className="py-3 px-4 rounded-xl border bg-card font-bold text-sm pos-btn flex items-center gap-1.5">
+                <Printer className="w-4 h-4" /> Fiş Yazdır
               </button>
               <button onClick={confirmPayment} className="flex-1 py-3 rounded-xl bg-pos-success text-pos-success-foreground font-bold text-sm pos-btn">
                 Ödeme Alındı
