@@ -18,6 +18,7 @@ interface OrderPanelProps {
   onSendToKitchen: () => void;
   onClearOrder: () => void;
   onPrintAdisyon: () => void;
+  fullWidth?: boolean;
 }
 
 export default function OrderPanel({
@@ -25,9 +26,10 @@ export default function OrderPanel({
   editNoteId, editNoteText,
   onUpdateQty, onRemoveItem, onEditNote, onSaveNote, onEditNoteTextChange,
   onSendToKitchen, onClearOrder, onPrintAdisyon,
+  fullWidth,
 }: OrderPanelProps) {
   return (
-    <div className="w-80 shrink-0 border-r bg-card flex flex-col">
+    <div className={`${fullWidth ? 'w-full' : 'w-80 shrink-0 border-r'} bg-card flex flex-col h-full`}>
       <div className="p-3 border-b flex items-center justify-between">
         <div>
           <h2 className="font-bold text-base">
@@ -92,20 +94,20 @@ export default function OrderPanel({
                   </div>
                   <div className="flex flex-col items-center gap-1 shrink-0">
                     <div className="flex items-center gap-1">
-                      <button onClick={() => onUpdateQty(item.id, -1)} className="w-8 h-8 rounded-lg bg-card border flex items-center justify-center pos-btn">
-                        <Minus className="w-3.5 h-3.5" />
+                      <button onClick={() => onUpdateQty(item.id, -1)} className="w-10 h-10 rounded-lg bg-card border flex items-center justify-center pos-btn">
+                        <Minus className="w-4 h-4" />
                       </button>
-                      <span className="w-6 text-center text-sm font-bold">{item.quantity}</span>
-                      <button onClick={() => onUpdateQty(item.id, 1)} className="w-8 h-8 rounded-lg bg-card border flex items-center justify-center pos-btn">
-                        <Plus className="w-3.5 h-3.5" />
+                      <span className="w-7 text-center text-sm font-bold">{item.quantity}</span>
+                      <button onClick={() => onUpdateQty(item.id, 1)} className="w-10 h-10 rounded-lg bg-card border flex items-center justify-center pos-btn">
+                        <Plus className="w-4 h-4" />
                       </button>
                     </div>
-                    <div className="flex items-center gap-0.5">
-                      <button onClick={() => onEditNote(item.id)} className="w-7 h-7 rounded-lg text-muted-foreground hover:bg-muted flex items-center justify-center pos-btn">
-                        <MessageSquare className="w-3 h-3" />
+                    <div className="flex items-center gap-1">
+                      <button onClick={() => onEditNote(item.id)} className="w-9 h-9 rounded-lg text-muted-foreground hover:bg-muted flex items-center justify-center pos-btn">
+                        <MessageSquare className="w-3.5 h-3.5" />
                       </button>
-                      <button onClick={() => onRemoveItem(item.id)} className="w-7 h-7 rounded-lg text-destructive/70 hover:bg-destructive/10 flex items-center justify-center pos-btn">
-                        <X className="w-3.5 h-3.5" />
+                      <button onClick={() => onRemoveItem(item.id)} className="w-9 h-9 rounded-lg text-destructive/70 hover:bg-destructive/10 flex items-center justify-center pos-btn">
+                        <X className="w-4 h-4" />
                       </button>
                     </div>
                   </div>

@@ -80,7 +80,7 @@ const OrderCard = memo(function OrderCard({ order, onStatusChange }: {
 });
 
 export default function MutfakEkrani() {
-  const { orders, updateOrderStatus, markOrderReady, refetchOrders } = usePOS();
+  const { orders, updateOrderStatus, markOrderReady, refetchOrders, setTableStatus } = usePOS();
   const { logout } = useAuth();
   const navigate = useNavigate();
 
@@ -116,6 +116,12 @@ export default function MutfakEkrani() {
       markOrderReady(orderId);
     } else {
       updateOrderStatus(orderId, newStatus);
+      if (newStatus === 'preparing') {
+        const order = orders.find(o => o.id === orderId);
+        if (order?.tableId) {
+          setTableStatus(order.tableId, 'preparing');
+        }
+      }
     }
   };
 

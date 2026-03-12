@@ -13,10 +13,10 @@ export default function ModifierModal({ item, modifierGroups, productModifierMap
   const [selectedModifiers, setSelectedModifiers] = useState<Record<string, string[]>>({});
   const [itemNote, setItemNote] = useState('');
 
-  const linkedGroups = productModifierMap.get(item.id);
-  const visibleGroups = modifierGroups.filter(group =>
-    !linkedGroups || linkedGroups.length === 0 || linkedGroups.includes(group.id)
-  );
+  const linkedGroups = productModifierMap.get(item.id) || [];
+  const visibleGroups = linkedGroups.length > 0
+    ? modifierGroups.filter(group => linkedGroups.includes(group.id))
+    : [];
 
   const toggleModifier = (groupId: string, optionId: string, type: 'checkbox' | 'radio') => {
     setSelectedModifiers(prev => {
@@ -63,9 +63,9 @@ export default function ModifierModal({ item, modifierGroups, productModifierMap
                       }`}
                     >
                       <span className="flex items-center gap-2">
-                        <span className={`w-5 h-5 rounded-${group.type === 'radio' ? 'full' : 'md'} border-2 flex items-center justify-center ${
-                          isSelected ? 'border-primary bg-primary' : 'border-muted-foreground/30'
-                        }`}>
+                        <span className={`w-5 h-5 border-2 flex items-center justify-center ${
+                          group.type === 'radio' ? 'rounded-full' : 'rounded-md'
+                        } ${isSelected ? 'border-primary bg-primary' : 'border-muted-foreground/30'}`}>
                           {isSelected && <span className="w-2 h-2 rounded-full bg-primary-foreground" />}
                         </span>
                         {opt.name}

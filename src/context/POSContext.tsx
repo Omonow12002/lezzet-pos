@@ -271,9 +271,11 @@ export function POSProvider({ restaurantId, staffId, children }: POSProviderProp
 
         setStaff((staffData || []).map(mapStaff));
 
+        const menuItemIds = new Set((itemData || []).map((i: Record<string, unknown>) => i.id as string));
         const pmMap = new Map<string, string[]>();
         (pmgData || []).forEach((row: Record<string, unknown>) => {
           const itemId = row.menu_item_id as string;
+          if (!menuItemIds.has(itemId)) return;
           const groupId = row.modifier_group_id as string;
           const existing = pmMap.get(itemId) || [];
           existing.push(groupId);
@@ -330,6 +332,29 @@ export function POSProvider({ restaurantId, staffId, children }: POSProviderProp
       restaurantId: (o.restaurant_id as string) || undefined,
       staffId: (o.staff_id as string) || undefined,
     })));
+  }, [restaurantId]);
+
+  // ─── Refetch Modifiers (on admin changes) ──────
+
+  const refetchModifiers = useCallback(async () => {
+    const rid = restaurantId;
+    const [{ data: modData }, { data: itemData }, { data: pmgData }] = await Promise.all([
+      supabase.from('modifier_groups').select('*, modifier_options(*)').eq('restaurant_id', rid).order('sort_order'),
+      supabase.from('menu_items').select('id').eq('restaurant_id', rid).eq('active', true),
+      supabase.from('product_modifier_groups').select('*'),
+    ]);
+    setModifierGroups((modData || []).map(mapModifierGroup));
+    const menuItemIds = new Set((itemData || []).map((i: Record<string, unknown>) => i.id as string));
+    const pmMap = new Map<string, string[]>();
+    (pmgData || []).forEach((row: Record<string, unknown>) => {
+      const itemId = row.menu_item_id as string;
+      if (!menuItemIds.has(itemId)) return;
+      const groupId = row.modifier_group_id as string;
+      const existing = pmMap.get(itemId) || [];
+      existing.push(groupId);
+      pmMap.set(itemId, existing);
+    });
+    setProductModifierMap(pmMap);
   }, [restaurantId]);
 
   // ─── Polling Fallback ──────────────────────────
@@ -421,6 +446,15 @@ export function POSProvider({ restaurantId, staffId, children }: POSProviderProp
           if (existing.some(p => p.id === newPayment.id)) return o;
           return { ...o, payments: [...existing, newPayment] };
         }));
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'modifier_groups', filter: `restaurant_id=eq.${restaurantId}` }, () => {
+        refetchModifiers();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'modifier_options' }, () => {
+        refetchModifiers();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'product_modifier_groups' }, () => {
+        refetchModifiers();
       })
       .subscribe((status) => {
         if (status === 'SUBSCRIBED') {

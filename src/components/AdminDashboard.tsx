@@ -21,8 +21,8 @@ export default function AdminDashboard() {
     cashTotal: stats.cashPayments,
     cardTotal: stats.cardPayments,
     totalOrders: stats.totalOrders,
-    cashTransactions: orders.filter(o => (o.payments || []).some(p => p.method === 'nakit')).length,
-    cardTransactions: orders.filter(o => (o.payments || []).some(p => p.method === 'kredi_karti')).length,
+    cashTransactions: todayOrders.filter(o => (o.payments || []).some(p => p.method === 'nakit')).length,
+    cardTransactions: todayOrders.filter(o => (o.payments || []).some(p => p.method === 'kredi_karti')).length,
     emptyTables: stats.availableTables,
     occupiedTables: stats.activeTables,
     waitingPaymentTables: tables.filter(t => t.status === 'waiting_payment').length,
@@ -33,34 +33,41 @@ export default function AdminDashboard() {
     printReceipt(formatGunSonu(buildGunSonuData()), 'Gun Sonu Raporu');
   };
 
-  // Generate hourly data from REAL orders only
   const hourlyData = useMemo(() => {
     const hours: Record<number, number> = {};
     for (let i = 0; i < 24; i++) hours[i] = 0;
-    orders.forEach(o => {
+    todayOrders.forEach(o => {
       const h = new Date(o.createdAt).getHours();
       hours[h] += o.total;
     });
     return Object.entries(hours)
       .map(([h, ciro]) => ({ saat: `${h.padStart(2, '0')}:00`, ciro }))
       .filter(d => d.ciro > 0);
+  }, [todayOrders]);
+
+  const todayOrders = useMemo(() => {
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    return orders.filter(o => new Date(o.createdAt) >= todayStart);
   }, [orders]);
 
   const stats = useMemo(() => {
-    const totalRevenue = orders.reduce((sum, o) =>
-      sum + (o.payments || []).reduce((s, p) => s + p.amount, 0), 0);
-    const totalOrders = orders.length;
+    const allPayments = todayOrders.flatMap(o => o.payments || []);
 
-    const cashPayments = orders.reduce((sum, o) =>
-      sum + (o.payments || []).filter(p => p.method === 'nakit').reduce((s, p) => s + p.amount, 0), 0);
-    const cardPayments = orders.reduce((sum, o) =>
-      sum + (o.payments || []).filter(p => p.method === 'kredi_karti').reduce((s, p) => s + p.amount, 0), 0);
+    const totalRevenue = allPayments.reduce((sum, p) => sum + p.amount, 0);
+    const totalOrders = todayOrders.length;
+
+    const cashPayments = allPayments.filter(p => p.method === 'nakit').reduce((s, p) => s + p.amount, 0);
+    const cardPayments = allPayments.filter(p => p.method === 'kredi_karti').reduce((s, p) => s + p.amount, 0);
+    const splitPayments = allPayments.filter(p => p.method === 'bolunmus').reduce((s, p) => s + p.amount, 0);
+    const discountPayments = allPayments.filter(p => p.method === 'discount').reduce((s, p) => s + p.amount, 0);
+    const otherPayments = totalRevenue - cashPayments - cardPayments - splitPayments - discountPayments;
 
     const activeTables = tables.filter(t => t.status !== 'available').length;
     const availableTables = tables.filter(t => t.status === 'available').length;
 
     const productMap: Record<string, { name: string; count: number }> = {};
-    orders.forEach(o => {
+    todayOrders.forEach(o => {
       o.items.forEach(item => {
         const key = item.menuItem.id || item.menuItem.name;
         if (!productMap[key]) productMap[key] = { name: item.menuItem.name, count: 0 };
@@ -76,8 +83,8 @@ export default function AdminDashboard() {
       avgTableMinutes = Math.round(totalMin / openTables.length);
     }
 
-    return { totalRevenue, totalOrders, cashPayments, cardPayments, activeTables, availableTables, topSelling, avgTableMinutes };
-  }, [orders, tables]);
+    return { totalRevenue, totalOrders, cashPayments, cardPayments, splitPayments, discountPayments, otherPayments, activeTables, availableTables, topSelling, avgTableMinutes };
+  }, [todayOrders, tables]);
 
   const today = new Date();
   const dateStr = today.toLocaleDateString('tr-TR', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
@@ -233,6 +240,24 @@ export default function AdminDashboard() {
                 %{stats.totalRevenue > 0 ? Math.round((stats.cardPayments / stats.totalRevenue) * 100) : 0}
               </p>
             </div>
+            {stats.splitPayments > 0 && (
+              <div className="p-4 rounded-xl bg-pos-warning/10 border border-pos-warning/20">
+                <p className="text-[10px] font-bold text-muted-foreground uppercase">Bolunmus</p>
+                <p className="text-lg font-black mt-1" style={{ color: 'hsl(38, 92%, 50%)' }}>{fmt(stats.splitPayments)}</p>
+                <p className="text-[10px] text-muted-foreground">
+                  %{stats.totalRevenue > 0 ? Math.round((stats.splitPayments / stats.totalRevenue) * 100) : 0}
+                </p>
+              </div>
+            )}
+            {stats.discountPayments > 0 && (
+              <div className="p-4 rounded-xl bg-muted/50 border border-muted">
+                <p className="text-[10px] font-bold text-muted-foreground uppercase">Indirim</p>
+                <p className="text-lg font-black mt-1 text-muted-foreground">{fmt(stats.discountPayments)}</p>
+                <p className="text-[10px] text-muted-foreground">
+                  %{stats.totalRevenue > 0 ? Math.round((stats.discountPayments / stats.totalRevenue) * 100) : 0}
+                </p>
+              </div>
+            )}
           </div>
         </div>
 

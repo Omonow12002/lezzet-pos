@@ -2,11 +2,12 @@ import { useState, useMemo, useCallback, useEffect } from 'react';
 import { usePOS } from '@/context/POSContext';
 import { useAuth } from '@/context/AuthContext';
 import { OrderItem, Table, MenuItem, OrderItemModifier } from '@/types/pos';
-import { ArrowLeft, Clock, LogOut, AlertTriangle } from 'lucide-react';
+import { ArrowLeft, Clock, LogOut, AlertTriangle, LayoutGrid, UtensilsCrossed, ClipboardList } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { formatAdisyon, printReceipt } from '@/lib/receipt';
 import { playSuccess } from '@/lib/sound';
+import { useIsMobile } from '@/hooks/use-mobile';
 
 import TableGrid from '@/components/waiter/TableGrid';
 import OrderPanel from '@/components/waiter/OrderPanel';
@@ -23,6 +24,8 @@ function formatDuration(openedAt?: Date) {
   return h > 0 ? `${h}s ${m}dk` : `${m}dk`;
 }
 
+type MobileTab = 'tables' | 'menu' | 'order';
+
 export default function GarsonPOS() {
   const {
     tables, categories, menuItems, addOrder, getTableOrders,
@@ -32,6 +35,7 @@ export default function GarsonPOS() {
   const { session, logout } = useAuth();
   const staffName = session?.name || null;
   const navigate = useNavigate();
+  const isMobile = useIsMobile();
 
   const [selectedTable, setSelectedTable] = useState<Table | null>(null);
   const [selectedCategory, setSelectedCategory] = useState(categories[0]?.id || '');
@@ -44,6 +48,7 @@ export default function GarsonPOS() {
   const [editNoteId, setEditNoteId] = useState<string | null>(null);
   const [editNoteText, setEditNoteText] = useState('');
   const [showSentWarning, setShowSentWarning] = useState<string | null>(null);
+  const [mobileTab, setMobileTab] = useState<MobileTab>('tables');
   const [, setTick] = useState(0);
 
   useEffect(() => {
@@ -64,7 +69,8 @@ export default function GarsonPOS() {
     } else {
       setOrderItems([]);
     }
-  }, [getTableOrders]);
+    if (isMobile) setMobileTab('menu');
+  }, [getTableOrders, isMobile]);
 
   const total = useMemo(
     () => orderItems.reduce((sum, i) => {
@@ -79,17 +85,18 @@ export default function GarsonPOS() {
   const totalPrepayment = tableOrders.reduce((sum, o) => sum + (o.prepayment || 0), 0);
   const remainingAmount = Math.max(0, total - totalPaid - totalPrepayment);
 
-  // ─── Item Management ───────────────────────────
+  const newItemCount = orderItems.filter(i => !i.sentToKitchen).length;
 
   const handleItemTap = useCallback((item: MenuItem) => {
     if (!selectedTable) return;
-    if (item.hasModifiers) {
+    const linked = productModifierMap.get(item.id);
+    if (item.hasModifiers && linked && linked.length > 0) {
       setPendingItem(item);
       setShowModifierModal(true);
     } else {
       addItemDirect(item, [], '');
     }
-  }, [selectedTable]);
+  }, [selectedTable, productModifierMap]);
 
   const addItemDirect = (item: MenuItem, modifiers: OrderItemModifier[], note: string) => {
     setOrderItems(prev => {
@@ -150,8 +157,6 @@ export default function GarsonPOS() {
     setEditNoteText('');
   };
 
-  // ─── Kitchen Send ──────────────────────────────
-
   const sendToKitchen = () => {
     if (!selectedTable || orderItems.length === 0) return;
     const newItems = orderItems.filter(i => !i.sentToKitchen);
@@ -211,7 +216,159 @@ export default function GarsonPOS() {
     setSearchQuery('');
   };
 
-  // ─── Render ────────────────────────────────────
+  // ─── Mobile Layout ──────────────────────────────
+
+  if (isMobile) {
+    return (
+      <div className="h-screen flex flex-col overflow-hidden bg-background">
+        {/* Mobile Header */}
+        <header className="flex items-center gap-2 px-3 py-2 bg-card border-b shrink-0">
+          <button onClick={() => { logout(); navigate(`/pos/${session?.type === 'staff' ? session.slug : ''}`); }} className="p-2 rounded-lg hover:bg-muted pos-btn">
+            <ArrowLeft className="w-5 h-5" />
+          </button>
+          <h1 className="text-base font-bold truncate">Garson POS</h1>
+          {staffName && <span className="text-xs text-muted-foreground font-medium">({staffName})</span>}
+          {selectedTable && (
+            <div className="ml-auto flex items-center gap-1.5">
+              {selectedTable.openedAt && (
+                <span className="flex items-center gap-1 px-1.5 py-0.5 rounded-lg bg-muted text-muted-foreground text-[10px] font-medium">
+                  <Clock className="w-3 h-3" /> {formatDuration(selectedTable.openedAt)}
+                </span>
+              )}
+              <span className="px-2 py-1 rounded-lg bg-primary/10 text-primary font-bold text-xs">{selectedTable.name}</span>
+            </div>
+          )}
+        </header>
+
+        {/* Mobile Content */}
+        <div className="flex-1 min-h-0 overflow-hidden">
+          {mobileTab === 'tables' && (
+            <TableGrid
+              tables={tables}
+              orders={orders}
+              floors={floors}
+              selectedFloor={selectedFloor}
+              onSelectFloor={setSelectedFloor}
+              onSelectTable={handleSelectTable}
+            />
+          )}
+          {mobileTab === 'menu' && selectedTable && (
+            <div className="flex flex-col h-full">
+              <CategorySidebar
+                categories={categories}
+                selectedCategory={selectedCategory}
+                showSearch={showSearch}
+                onSelectCategory={handleSelectCategory}
+                horizontal
+              />
+              <ProductGrid
+                menuItems={menuItems}
+                selectedCategory={selectedCategory}
+                showSearch={showSearch}
+                searchQuery={searchQuery}
+                onToggleSearch={() => { setShowSearch(!showSearch); setSearchQuery(''); }}
+                onSearchChange={setSearchQuery}
+                onItemTap={handleItemTap}
+                onBackToTables={() => { setSelectedTable(null); setMobileTab('tables'); }}
+              />
+            </div>
+          )}
+          {mobileTab === 'menu' && !selectedTable && (
+            <div className="flex items-center justify-center h-full text-muted-foreground text-sm">
+              Önce bir masa seçin
+            </div>
+          )}
+          {mobileTab === 'order' && (
+            <OrderPanel
+              selectedTable={selectedTable}
+              orderItems={orderItems}
+              total={total}
+              totalPaid={totalPaid}
+              totalPrepayment={totalPrepayment}
+              remainingAmount={remainingAmount}
+              editNoteId={editNoteId}
+              editNoteText={editNoteText}
+              onUpdateQty={handleUpdateQty}
+              onRemoveItem={handleRemoveItem}
+              onEditNote={handleEditNote}
+              onSaveNote={handleSaveNote}
+              onEditNoteTextChange={setEditNoteText}
+              onSendToKitchen={sendToKitchen}
+              onClearOrder={clearOrder}
+              onPrintAdisyon={printAdisyon}
+              fullWidth
+            />
+          )}
+        </div>
+
+        {/* Mobile Bottom Tab Bar */}
+        <nav className="shrink-0 border-t bg-card flex">
+          <button
+            onClick={() => setMobileTab('tables')}
+            className={`flex-1 flex flex-col items-center gap-0.5 py-2.5 text-xs font-semibold pos-btn ${
+              mobileTab === 'tables' ? 'text-primary' : 'text-muted-foreground'
+            }`}
+          >
+            <LayoutGrid className="w-5 h-5" />
+            Masalar
+          </button>
+          <button
+            onClick={() => setMobileTab('menu')}
+            className={`flex-1 flex flex-col items-center gap-0.5 py-2.5 text-xs font-semibold pos-btn ${
+              mobileTab === 'menu' ? 'text-primary' : 'text-muted-foreground'
+            }`}
+          >
+            <UtensilsCrossed className="w-5 h-5" />
+            Menü
+          </button>
+          <button
+            onClick={() => setMobileTab('order')}
+            className={`flex-1 flex flex-col items-center gap-0.5 py-2.5 text-xs font-semibold pos-btn relative ${
+              mobileTab === 'order' ? 'text-primary' : 'text-muted-foreground'
+            }`}
+          >
+            <ClipboardList className="w-5 h-5" />
+            Sipariş
+            {newItemCount > 0 && (
+              <span className="absolute top-1 right-1/4 w-5 h-5 rounded-full bg-pos-danger text-pos-danger-foreground text-[10px] font-bold flex items-center justify-center">
+                {newItemCount}
+              </span>
+            )}
+          </button>
+        </nav>
+
+        {/* Modifier Modal */}
+        {showModifierModal && pendingItem && (
+          <ModifierModal
+            item={pendingItem}
+            modifierGroups={modifierGroups}
+            productModifierMap={productModifierMap}
+            onConfirm={handleConfirmModifiers}
+            onCancel={() => { setShowModifierModal(false); setPendingItem(null); }}
+          />
+        )}
+
+        {/* Sent Item Warning */}
+        {showSentWarning && (
+          <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 animate-fade-in" onClick={() => setShowSentWarning(null)}>
+            <div className="bg-card rounded-2xl w-full max-w-sm mx-4 shadow-2xl animate-slide-up overflow-hidden" onClick={e => e.stopPropagation()}>
+              <div className="p-5 text-center">
+                <AlertTriangle className="w-12 h-12 text-pos-warning mx-auto mb-3" />
+                <h3 className="text-lg font-black mb-2">Dikkat!</h3>
+                <p className="text-sm text-muted-foreground">Bu ürün mutfağa gönderildi. Değiştirmek istediğinize emin misiniz?</p>
+              </div>
+              <div className="p-4 border-t flex gap-2">
+                <button onClick={() => setShowSentWarning(null)} className="flex-1 py-3 rounded-xl bg-muted font-semibold text-sm pos-btn">İptal</button>
+                <button onClick={confirmSentEdit} className="flex-1 py-3 rounded-xl bg-pos-danger text-pos-danger-foreground font-bold text-sm pos-btn">Evet, Değiştir</button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // ─── Desktop Layout ─────────────────────────────
 
   return (
     <div className="h-screen flex flex-col overflow-hidden bg-background">
@@ -240,7 +397,6 @@ export default function GarsonPOS() {
       </header>
 
       <div className="flex flex-1 min-h-0">
-        {/* Left - Order Summary */}
         <OrderPanel
           selectedTable={selectedTable}
           orderItems={orderItems}
@@ -260,7 +416,6 @@ export default function GarsonPOS() {
           onPrintAdisyon={printAdisyon}
         />
 
-        {/* Center - Tables or Products */}
         {!selectedTable ? (
           <TableGrid
             tables={tables}
@@ -283,7 +438,6 @@ export default function GarsonPOS() {
           />
         )}
 
-        {/* Right - Categories */}
         {selectedTable && (
           <CategorySidebar
             categories={categories}
@@ -294,7 +448,6 @@ export default function GarsonPOS() {
         )}
       </div>
 
-      {/* Modifier Modal */}
       {showModifierModal && pendingItem && (
         <ModifierModal
           item={pendingItem}
@@ -305,7 +458,6 @@ export default function GarsonPOS() {
         />
       )}
 
-      {/* Sent Item Warning */}
       {showSentWarning && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 animate-fade-in" onClick={() => setShowSentWarning(null)}>
           <div className="bg-card rounded-2xl w-full max-w-sm mx-4 shadow-2xl animate-slide-up overflow-hidden" onClick={e => e.stopPropagation()}>
@@ -315,12 +467,8 @@ export default function GarsonPOS() {
               <p className="text-sm text-muted-foreground">Bu ürün mutfağa gönderildi. Değiştirmek istediğinize emin misiniz?</p>
             </div>
             <div className="p-4 border-t flex gap-2">
-              <button onClick={() => setShowSentWarning(null)} className="flex-1 py-3 rounded-xl bg-muted font-semibold text-sm pos-btn">
-                İptal
-              </button>
-              <button onClick={confirmSentEdit} className="flex-1 py-3 rounded-xl bg-pos-danger text-pos-danger-foreground font-bold text-sm pos-btn">
-                Evet, Değiştir
-              </button>
+              <button onClick={() => setShowSentWarning(null)} className="flex-1 py-3 rounded-xl bg-muted font-semibold text-sm pos-btn">İptal</button>
+              <button onClick={confirmSentEdit} className="flex-1 py-3 rounded-xl bg-pos-danger text-pos-danger-foreground font-bold text-sm pos-btn">Evet, Değiştir</button>
             </div>
           </div>
         </div>
