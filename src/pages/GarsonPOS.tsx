@@ -27,10 +27,6 @@ function formatDuration(openedAt?: Date) {
 type MobileTab = 'tables' | 'menu' | 'order';
 
 export default function GarsonPOS() {
-  // #region agent log
-  console.log('[DEBUG-b1a753] GarsonPOS render start');
-  fetch('http://127.0.0.1:7445/ingest/b8d5d89b-c3cc-4877-b1ec-68f838950bb8',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'b1a753'},body:JSON.stringify({sessionId:'b1a753',location:'GarsonPOS.tsx:30',message:'GarsonPOS render start',data:{},timestamp:Date.now(),hypothesisId:'C'})}).catch(()=>{});
-  // #endregion
   const {
     tables, categories, menuItems, addOrder, getTableOrders,
     setTableTotal, openTable, modifierGroups, floors,
@@ -168,6 +164,10 @@ export default function GarsonPOS() {
       toast.info('Tüm ürünler zaten mutfağa gönderildi');
       return;
     }
+    const newItemsTotal = newItems.reduce((sum, i) => {
+      const modExtra = i.modifiers.reduce((s, m) => s + m.extraPrice, 0);
+      return sum + (i.menuItem.price + modExtra) * i.quantity;
+    }, 0);
     addOrder({
       id: Date.now().toString(),
       tableId: selectedTable.id,
@@ -175,7 +175,7 @@ export default function GarsonPOS() {
       items: newItems,
       status: 'sent_to_kitchen',
       createdAt: new Date(),
-      total,
+      total: newItemsTotal,
     });
     openTable(selectedTable.id);
     setTableTotal(selectedTable.id, total);

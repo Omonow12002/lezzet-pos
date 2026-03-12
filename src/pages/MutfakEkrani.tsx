@@ -80,11 +80,7 @@ const OrderCard = memo(function OrderCard({ order, onStatusChange }: {
 });
 
 export default function MutfakEkrani() {
-  // #region agent log
-  console.log('[DEBUG-b1a753] MutfakEkrani render start');
-  fetch('http://127.0.0.1:7445/ingest/b8d5d89b-c3cc-4877-b1ec-68f838950bb8',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'b1a753'},body:JSON.stringify({sessionId:'b1a753',location:'MutfakEkrani.tsx:83',message:'MutfakEkrani render start',data:{},timestamp:Date.now(),hypothesisId:'C'})}).catch(()=>{});
-  // #endregion
-  const { orders, updateOrderStatus, markOrderReady, refetchOrders, setTableStatus } = usePOS();
+  const { orders, updateOrderStatus, markOrderReady, refetchOrders } = usePOS();
   const { logout } = useAuth();
   const navigate = useNavigate();
 
@@ -120,12 +116,6 @@ export default function MutfakEkrani() {
       markOrderReady(orderId);
     } else {
       updateOrderStatus(orderId, newStatus);
-      if (newStatus === 'preparing') {
-        const order = orders.find(o => o.id === orderId);
-        if (order?.tableId) {
-          setTableStatus(order.tableId, 'preparing');
-        }
-      }
     }
   };
 

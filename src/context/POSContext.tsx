@@ -153,6 +153,15 @@ function mapStaff(row: Record<string, unknown>): Staff {
   };
 }
 
+function deriveTableStatus(allOrders: Order[], tableId: string): TableStatus {
+  const active = allOrders.filter(o => o.tableId === tableId && o.status !== 'paid' && o.status !== 'closed');
+  if (active.length === 0) return 'available';
+  if (active.some(o => o.status === 'waiting_payment')) return 'waiting_payment';
+  if (active.some(o => o.status === 'ready')) return 'ready';
+  if (active.some(o => o.status === 'preparing')) return 'preparing';
+  return 'occupied';
+}
+
 // Active statuses that should be fetched (not terminal)
 const ACTIVE_ORDER_STATUSES = ['created', 'sent_to_kitchen', 'preparing', 'ready', 'waiting_payment'];
 
@@ -430,13 +439,25 @@ export function POSProvider({ restaurantId, staffId, children }: POSProviderProp
           setOrders(prev => prev.filter(o => o.id !== payload.old.id));
         }
       })
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'order_items', filter: `restaurant_id=eq.${restaurantId}` }, (payload) => {
-        const newItem = mapOrderItem(payload.new);
-        setOrders(prev => prev.map(o => {
-          if (o.id !== payload.new.order_id) return o;
-          if (o.items.some(i => i.id === newItem.id)) return o;
-          return { ...o, items: [...o.items, newItem] };
-        }));
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'order_items', filter: `restaurant_id=eq.${restaurantId}` }, (payload) => {
+        if (payload.eventType === 'INSERT') {
+          const newItem = mapOrderItem(payload.new);
+          setOrders(prev => prev.map(o => {
+            if (o.id !== payload.new.order_id) return o;
+            if (o.items.some(i => i.id === newItem.id)) return o;
+            return { ...o, items: [...o.items, newItem] };
+          }));
+        } else if (payload.eventType === 'UPDATE') {
+          const updatedItem = mapOrderItem(payload.new);
+          setOrders(prev => prev.map(o => {
+            if (o.id !== payload.new.order_id) return o;
+            return { ...o, items: o.items.map(i => i.id === updatedItem.id ? updatedItem : i) };
+          }));
+        } else if (payload.eventType === 'DELETE') {
+          setOrders(prev => prev.map(o => ({
+            ...o, items: o.items.filter(i => i.id !== payload.old.id),
+          })));
+        }
       })
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'payments', filter: `restaurant_id=eq.${restaurantId}` }, (payload) => {
         const newPayment = mapPayment(payload.new);
@@ -466,6 +487,39 @@ export function POSProvider({ restaurantId, staffId, children }: POSProviderProp
 
     return () => { supabase.removeChannel(channel); };
   }, [restaurantId]);
+
+  // ─── Table Functions ───────────────────────────
+
+  const setTableStatus = useCallback((tableId: string, status: TableStatus) => {
+    setTables(prev => prev.map(t => {
+      if (t.id !== tableId) return t;
+      if (status === 'available') return { ...t, status, openedAt: undefined, currentTotal: 0 };
+      return { ...t, status };
+    }));
+    const dbUpdates: Record<string, unknown> = { status };
+    if (status === 'available') { dbUpdates.opened_at = null; dbUpdates.current_total = 0; }
+    supabase.from('tables').update(dbUpdates).eq('id', tableId).then(({ error }) => {
+      if (error) console.error('setTableStatus error:', error);
+    });
+  }, []);
+
+  const setTableTotal = useCallback((tableId: string, total: number) => {
+    setTables(prev => prev.map(t => t.id === tableId ? { ...t, currentTotal: total } : t));
+    supabase.from('tables').update({ current_total: total }).eq('id', tableId).then(({ error }) => {
+      if (error) console.error('setTableTotal error:', error);
+    });
+  }, []);
+
+  const openTable = useCallback((tableId: string) => {
+    setTables(prev => prev.map(t => {
+      if (t.id !== tableId || t.status !== 'available') return t;
+      return { ...t, status: 'occupied' as TableStatus, openedAt: new Date() };
+    }));
+    supabase.from('tables')
+      .update({ status: 'occupied', opened_at: new Date().toISOString() })
+      .eq('id', tableId).eq('status', 'available')
+      .then(({ error }) => { if (error) console.error('openTable error:', error); });
+  }, []);
 
   // ─── Order Functions ───────────────────────────
 
@@ -525,11 +579,17 @@ export function POSProvider({ restaurantId, staffId, children }: POSProviderProp
   }, []);
 
   const updateOrderStatus = useCallback((orderId: string, status: OrderStatus) => {
-    setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status } : o));
+    const order = ordersRef.current.find(o => o.id === orderId);
+    const updatedOrders = ordersRef.current.map(o => o.id === orderId ? { ...o, status } : o);
+    setOrders(updatedOrders);
     supabase.from('orders').update({ status }).eq('id', orderId).then(({ error }) => {
       if (error) console.error('updateOrderStatus error:', error);
     });
-  }, []);
+    if (order?.tableId) {
+      const tableStatus = deriveTableStatus(updatedOrders, order.tableId);
+      setTableStatus(order.tableId, tableStatus);
+    }
+  }, [setTableStatus]);
 
   const removeOrder = useCallback((orderId: string) => {
     setOrders(prev => prev.filter(o => o.id !== orderId));
@@ -540,39 +600,6 @@ export function POSProvider({ restaurantId, staffId, children }: POSProviderProp
 
   const getTableOrders = useCallback((tableId: string) => {
     return ordersRef.current.filter(o => o.tableId === tableId && o.status !== 'paid' && o.status !== 'closed');
-  }, []);
-
-  // ─── Table Functions ───────────────────────────
-
-  const setTableStatus = useCallback((tableId: string, status: TableStatus) => {
-    setTables(prev => prev.map(t => {
-      if (t.id !== tableId) return t;
-      if (status === 'available') return { ...t, status, openedAt: undefined, currentTotal: 0 };
-      return { ...t, status };
-    }));
-    const dbUpdates: Record<string, unknown> = { status };
-    if (status === 'available') { dbUpdates.opened_at = null; dbUpdates.current_total = 0; }
-    supabase.from('tables').update(dbUpdates).eq('id', tableId).then(({ error }) => {
-      if (error) console.error('setTableStatus error:', error);
-    });
-  }, []);
-
-  const setTableTotal = useCallback((tableId: string, total: number) => {
-    setTables(prev => prev.map(t => t.id === tableId ? { ...t, currentTotal: total } : t));
-    supabase.from('tables').update({ current_total: total }).eq('id', tableId).then(({ error }) => {
-      if (error) console.error('setTableTotal error:', error);
-    });
-  }, []);
-
-  const openTable = useCallback((tableId: string) => {
-    setTables(prev => prev.map(t => {
-      if (t.id !== tableId || t.status !== 'available') return t;
-      return { ...t, status: 'occupied' as TableStatus, openedAt: new Date() };
-    }));
-    supabase.from('tables')
-      .update({ status: 'occupied', opened_at: new Date().toISOString() })
-      .eq('id', tableId).eq('status', 'available')
-      .then(({ error }) => { if (error) console.error('openTable error:', error); });
   }, []);
 
   // ─── Payment Function ─────────────────────────
@@ -595,11 +622,13 @@ export function POSProvider({ restaurantId, staffId, children }: POSProviderProp
   // ─── Atomic POS Operations (use DB RPCs) ──────
 
   const markOrderReady = useCallback(async (orderId: string) => {
-    setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status: 'waiting_payment' as OrderStatus } : o));
-
     const order = ordersRef.current.find(o => o.id === orderId);
+    const updatedOrders = ordersRef.current.map(o => o.id === orderId ? { ...o, status: 'waiting_payment' as OrderStatus } : o);
+    setOrders(updatedOrders);
+
     if (order?.tableId) {
-      setTables(prev => prev.map(t => t.id === order.tableId ? { ...t, status: 'waiting_payment' as TableStatus } : t));
+      const tableStatus = deriveTableStatus(updatedOrders, order.tableId);
+      setTableStatus(order.tableId, tableStatus);
     }
 
     const { error } = await supabase.rpc('mark_order_ready', { p_order_id: orderId });
@@ -607,20 +636,19 @@ export function POSProvider({ restaurantId, staffId, children }: POSProviderProp
       console.error('markOrderReady error:', error);
       await refetchOrders();
     }
-  }, [refetchOrders]);
+  }, [refetchOrders, setTableStatus]);
 
   const completePaymentFn = useCallback(async (
     orderId: string, amount: number, method: string,
     payStaffId?: string, discountAmount?: number, discountReason?: string
   ) => {
     const order = ordersRef.current.find(o => o.id === orderId);
+    const updatedOrders = ordersRef.current.map(o => o.id === orderId ? { ...o, status: 'paid' as OrderStatus } : o);
+    setOrders(updatedOrders);
 
-    setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status: 'paid' as OrderStatus } : o));
     if (order?.tableId) {
-      setTables(prev => prev.map(t => t.id === order.tableId
-        ? { ...t, status: 'available' as TableStatus, currentTotal: 0, openedAt: undefined }
-        : t
-      ));
+      const tableStatus = deriveTableStatus(updatedOrders, order.tableId);
+      setTableStatus(order.tableId, tableStatus);
     }
 
     const { error } = await supabase.rpc('complete_payment', {
@@ -634,8 +662,9 @@ export function POSProvider({ restaurantId, staffId, children }: POSProviderProp
     if (error) {
       console.error('completePayment error:', error);
       await refetchOrders();
+      throw new Error(error.message);
     }
-  }, [staffId, refetchOrders]);
+  }, [staffId, refetchOrders, setTableStatus]);
 
   // ─── Admin CRUD Helpers ────────────────────────
 
