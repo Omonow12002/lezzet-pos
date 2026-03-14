@@ -97,15 +97,16 @@ function mapTable(row: Record<string, unknown>, floorMap: Map<string, string>): 
 
 function mapOrderItem(row: Record<string, unknown>, lookup?: Map<string, MenuItem>): OrderItem {
   const menuItemId = (row.menu_item_id as string) || '';
+  // Priority: Supabase join > denormalized DB columns > in-memory menu lookup
+  const joined = row.menu_items as { id?: string; name?: string; price?: number } | null | undefined;
   const found = lookup?.get(menuItemId);
+
+  const name = joined?.name || (row.menu_item_name as string) || (row.name as string) || found?.name || '';
+  const price = joined?.price ?? (Number(row.menu_item_price) || Number(row.unit_price) || found?.price || 0);
+
   return {
     id: row.id as string,
-    menuItem: {
-      id: menuItemId,
-      name: (row.menu_item_name as string) || found?.name || '',
-      price: Number(row.menu_item_price) || found?.price || 0,
-      categoryId: found?.categoryId || '',
-    },
+    menuItem: { id: menuItemId, name, price, categoryId: found?.categoryId || '' },
     quantity: Number(row.quantity),
     modifiers: (row.modifiers as OrderItem['modifiers']) || [],
     note: (row.note as string) || undefined,
@@ -235,10 +236,10 @@ export function POSProvider({ restaurantId, staffId, children }: POSProviderProp
           supabase.from('restaurants').select('name').eq('id', rid).single(),
         ]);
 
-        // Fetch order_items by order ID to avoid restaurant_id column dependency
+        // Fetch order_items joined with menu_items so name/price are always available
         const orderIds = (ordersData || []).map((o: Record<string, unknown>) => o.id as string);
         const { data: orderItemsData } = orderIds.length > 0
-          ? await supabase.from('order_items').select('*').in('order_id', orderIds)
+          ? await supabase.from('order_items').select('*, menu_items(id, name, price)').in('order_id', orderIds)
           : { data: [] as Record<string, unknown>[] };
 
         if (cancelled) return;
@@ -330,10 +331,10 @@ export function POSProvider({ restaurantId, staffId, children }: POSProviderProp
       supabase.from('orders').select('*').eq('restaurant_id', rid).or(`${statusFilter},created_at.gte.${todayStart.toISOString()}`),
       supabase.from('payments').select('*').eq('restaurant_id', rid),
     ]);
-    // Fetch order_items by order ID to avoid restaurant_id column dependency
+    // Fetch order_items joined with menu_items so name/price are always available
     const orderIds = (ordersData || []).map((o: Record<string, unknown>) => o.id as string);
     const { data: orderItemsData } = orderIds.length > 0
-      ? await supabase.from('order_items').select('*').in('order_id', orderIds)
+      ? await supabase.from('order_items').select('*, menu_items(id, name, price)').in('order_id', orderIds)
       : { data: [] as Record<string, unknown>[] };
     const miLookup = menuItemsRef.current;
     const itemsByOrder = new Map<string, OrderItem[]>();
@@ -447,10 +448,10 @@ export function POSProvider({ restaurantId, staffId, children }: POSProviderProp
               prepayment: payload.new.prepayment ? Number(payload.new.prepayment) : undefined,
             }];
           });
-          // Immediately fetch items for this order — bypasses the restaurant_id filter
-          // on the order_items subscription which may not work if migration was not applied.
+          // Immediately fetch items for this order with menu_items join for name/price.
+          // Bypasses the restaurant_id filter on the subscription which may fail if migration not applied.
           const orderId = payload.new.id as string;
-          supabase.from('order_items').select('*').eq('order_id', orderId).then(({ data }) => {
+          supabase.from('order_items').select('*, menu_items(id, name, price)').eq('order_id', orderId).then(({ data }) => {
             if (data && data.length > 0) {
               const miLookup = menuItemsRef.current;
               const items = (data as Record<string, unknown>[]).map(oi => mapOrderItem(oi, miLookup));
@@ -581,6 +582,7 @@ export function POSProvider({ restaurantId, staffId, children }: POSProviderProp
     }
 
     if (itemsWithIds.length > 0) {
+      // Try full insert (with denormalized columns from migration_complete_fix.sql)
       const { error: itemsErr } = await supabase.from('order_items').insert(
         itemsWithIds.map(item => ({
           id: item.id,
@@ -596,7 +598,22 @@ export function POSProvider({ restaurantId, staffId, children }: POSProviderProp
           restaurant_id: restaurantId,
         }))
       );
-      if (itemsErr) console.error('addOrder items error:', itemsErr.message);
+      if (itemsErr) {
+        // Migration may not have been applied — retry with minimal columns that always exist
+        console.warn('addOrder items full insert failed, retrying minimal:', itemsErr.message);
+        const { error: retryErr } = await supabase.from('order_items').insert(
+          itemsWithIds.map(item => ({
+            id: item.id,
+            order_id: orderId,
+            menu_item_id: item.menuItem.id || null,
+            quantity: item.quantity,
+            modifiers: item.modifiers,
+            note: item.note || null,
+            sent_to_kitchen: true,
+          }))
+        );
+        if (retryErr) console.error('addOrder items retry error:', retryErr.message);
+      }
     }
 
     return { success: true };
