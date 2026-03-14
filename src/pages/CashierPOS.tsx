@@ -133,20 +133,34 @@ export default function CashierPOS() {
             const isWaiting = t.status === 'waiting_payment';
             const hasOrder = !!order;
 
+            const totalPaid = (order?.payments || []).reduce((s, p) => s + p.amount, 0);
+            const prepayment = order?.prepayment || 0;
+            const remaining = order ? Math.max(0, order.total - totalPaid - prepayment) : 0;
+            const hasPrepayment = prepayment > 0 || totalPaid > 0;
+
             return (
               <button
                 key={t.id}
                 onClick={() => handleTableTap(t)}
-                className={`relative flex flex-col items-center justify-center p-5 rounded-2xl border-2 ${TABLE_STATUS_BORDER_COLORS[t.status]} bg-card pos-btn transition-all ${
+                className={`relative flex flex-col items-center justify-center p-4 rounded-2xl border-2 ${TABLE_STATUS_BORDER_COLORS[t.status]} bg-card pos-btn transition-all ${
                   isWaiting ? 'hover:shadow-lg ring-2 ring-pos-warning/40' : hasOrder ? 'hover:shadow-md' : 'opacity-60'
                 }`}
               >
                 <span className={`absolute top-2 right-2 w-3 h-3 rounded-full ${TABLE_STATUS_COLORS[t.status]}`} />
                 <span className="text-2xl font-black text-foreground">{t.name.replace('Masa ', '')}</span>
-                <span className="text-xs text-muted-foreground mt-1">{t.name}</span>
+                <span className="text-xs text-muted-foreground mt-0.5">{t.name}</span>
 
                 {order && (
-                  <span className="text-sm font-black text-primary mt-1">{order.total} TL</span>
+                  <>
+                    {hasPrepayment ? (
+                      <>
+                        <span className="text-[10px] text-muted-foreground line-through mt-1">{order.total} TL</span>
+                        <span className="text-sm font-black text-pos-warning">{remaining} TL kalan</span>
+                      </>
+                    ) : (
+                      <span className="text-sm font-black text-primary mt-1">{order.total} TL</span>
+                    )}
+                  </>
                 )}
 
                 <span className={`text-[10px] font-bold mt-1 ${isWaiting ? 'text-pos-warning' : 'text-muted-foreground'}`}>
