@@ -2,9 +2,10 @@ import { useEffect, useRef, useState, memo } from 'react';
 import { usePOS } from '@/context/POSContext';
 import { useAuth } from '@/context/AuthContext';
 import { Order, OrderStatus } from '@/types/pos';
-import { Clock, ChefHat, LogOut } from 'lucide-react';
+import { Clock, ChefHat, LogOut, Printer } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { playNotification } from '@/lib/sound';
+import { formatKitchenTicket, printReceipt } from '@/lib/receipt';
 
 const KITCHEN_COLUMNS: { status: OrderStatus; label: string; emoji: string; bgClass: string }[] = [
   { status: 'sent_to_kitchen', label: 'Yeni Sipariş', emoji: '🔴', bgClass: 'border-pos-danger' },
@@ -31,49 +32,105 @@ const OrderCard = memo(function OrderCard({ order, onStatusChange }: {
   const elapsed = useElapsedTime(order.createdAt);
   const isUrgent = order.status === 'sent_to_kitchen' && (Date.now() - new Date(order.createdAt).getTime()) > 300000;
 
+  const handlePrint = () => {
+    const ticket = formatKitchenTicket({
+      tableName: order.tableName,
+      orderNumber: order.id.slice(-4).toUpperCase(),
+      date: new Date(order.createdAt),
+      items: order.items.map(i => ({
+        name: i.menuItem.name,
+        qty: i.quantity,
+        modifiers: i.modifiers.map(m => m.optionName),
+        note: i.note,
+      })),
+    });
+    printReceipt(ticket, `Mutfak - ${order.tableName}`);
+  };
+
+  const urgentClass = isUrgent ? 'border-pos-danger ring-2 ring-pos-danger/20' : 'border-border';
+
   return (
-    <div className={`bg-card rounded-2xl border-2 p-4 shadow-sm animate-slide-in ${isUrgent ? 'border-pos-danger ring-2 ring-pos-danger/20' : 'border-border'}`}>
-      <div className="flex justify-between items-center mb-3">
-        <h3 className="font-black text-xl">{order.tableName}</h3>
-        <span className={`flex items-center gap-1 text-xs font-medium px-2 py-1 rounded-full ${isUrgent ? 'bg-pos-danger/10 text-pos-danger' : 'bg-muted text-muted-foreground'}`}>
-          <Clock className="w-3 h-3" /> {elapsed}
-        </span>
+    <div className={`bg-card rounded-xl border-2 overflow-hidden shadow-md animate-slide-in font-mono ${urgentClass}`}>
+      {/* Header band */}
+      <div className={`px-4 py-3 flex justify-between items-center border-b ${isUrgent ? 'bg-pos-danger/10' : 'bg-muted'}`}>
+        <span className="font-black text-2xl tracking-tight">{order.tableName}</span>
+        <div className="text-right">
+          <p className="text-xs text-muted-foreground font-mono">#{order.id.slice(-4).toUpperCase()}</p>
+          <span className={`text-xs flex items-center gap-1 justify-end ${isUrgent ? 'text-pos-danger font-bold' : 'text-muted-foreground'}`}>
+            <Clock className="w-3 h-3" /> {elapsed}
+          </span>
+        </div>
       </div>
-      <ul className="space-y-1.5 mb-4">
+
+      {/* Items — ticket style */}
+      <div className="px-4 py-3 space-y-2.5 border-b border-dashed">
         {order.items.map(item => (
-          <li key={item.id} className="text-sm">
-            <span className="font-bold">{item.quantity}x</span>{' '}
-            <span className="font-medium">{item.menuItem.name}</span>
-            {item.modifiers.length > 0 && (
-              <div className="ml-5">
-                {item.modifiers.map((m, i) => (
-                  <p key={i} className="text-[11px] text-muted-foreground">• {m.optionName}</p>
-                ))}
-              </div>
-            )}
+          <div key={item.id}>
+            <p className="font-black text-base leading-tight">
+              <span className="text-xl mr-1">{item.quantity}x</span> {item.menuItem.name}
+            </p>
+            {item.modifiers.map((m, i) => (
+              <p key={i} className="text-sm text-muted-foreground ml-6">+ {m.optionName}</p>
+            ))}
             {item.note && (
-              <p className="ml-5 text-[11px] text-pos-warning font-medium italic">NOT: {item.note}</p>
+              <p className="text-sm font-bold text-pos-warning ml-6">NOT: {item.note}</p>
             )}
-          </li>
+          </div>
         ))}
-      </ul>
-      <div className="flex gap-2">
+      </div>
+
+      {/* Action buttons */}
+      <div className="px-3 py-2.5 flex gap-2 items-center">
         {order.status === 'sent_to_kitchen' && (
           <button
             onClick={() => onStatusChange('preparing')}
-            className="flex-1 py-3 rounded-xl bg-pos-warning text-pos-warning-foreground font-bold text-sm pos-btn shadow-md"
+            className="flex-1 py-2.5 rounded-lg bg-pos-warning text-pos-warning-foreground font-bold text-sm pos-btn"
           >
             🍳 Hazırlanıyor
           </button>
         )}
+
         {order.status === 'preparing' && (
-          <button
-            onClick={() => onStatusChange('ready')}
-            className="flex-1 py-3 rounded-xl bg-pos-success text-pos-success-foreground font-bold text-sm pos-btn shadow-md"
-          >
-            ✅ Hazır
-          </button>
+          <>
+            <button
+              onClick={() => onStatusChange('sent_to_kitchen')}
+              className="py-2.5 px-3 rounded-lg bg-muted text-muted-foreground font-bold text-sm pos-btn border"
+            >
+              İptal
+            </button>
+            <button
+              onClick={() => onStatusChange('ready')}
+              className="flex-1 py-2.5 rounded-lg bg-pos-success text-pos-success-foreground font-bold text-sm pos-btn"
+            >
+              ✅ Hazır
+            </button>
+          </>
         )}
+
+        {order.status === 'ready' && (
+          <>
+            <button
+              onClick={() => onStatusChange('preparing')}
+              className="py-2.5 px-3 rounded-lg bg-muted text-muted-foreground font-bold text-sm pos-btn border"
+            >
+              İptal
+            </button>
+            <button
+              onClick={() => onStatusChange('waiting_payment')}
+              className="flex-1 py-2.5 rounded-lg bg-primary text-primary-foreground font-bold text-sm pos-btn"
+            >
+              🤝 Teslim Edildi
+            </button>
+          </>
+        )}
+
+        <button
+          onClick={handlePrint}
+          className="p-2.5 rounded-lg bg-muted hover:bg-muted/80 pos-btn border"
+          title="Fişi Yazdır"
+        >
+          <Printer className="w-4 h-4" />
+        </button>
       </div>
     </div>
   );
@@ -112,7 +169,7 @@ export default function MutfakEkrani() {
   }, [refetchOrders]);
 
   const handleStatusChange = (orderId: string, newStatus: OrderStatus) => {
-    if (newStatus === 'ready') {
+    if (newStatus === 'waiting_payment') {
       markOrderReady(orderId);
     } else {
       updateOrderStatus(orderId, newStatus);

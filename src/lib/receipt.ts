@@ -85,32 +85,47 @@ export function formatAdisyon(data: AdisyonData): string {
 
 export interface KitchenTicketData {
   tableName: string;
-  staffName: string;
+  staffName?: string;
+  orderNumber?: string;        // short ID shown as #XXXX
   date: Date;
   items: { name: string; qty: number; modifiers?: string[]; note?: string }[];
   orderNote?: string;
+  restaurantName?: string;
 }
 
 export function formatKitchenTicket(data: KitchenTicketData): string {
   const lines: string[] = [];
+  const THICK = '='.repeat(W);
 
-  lines.push(center('MUTFAK'));
-  lines.push('');
-  lines.push(SEP);
-  lines.push(row('Masa:', data.tableName));
-  lines.push(row('Garson:', data.staffName));
-  lines.push(row('Saat:', fmtTime(data.date)));
+  lines.push(THICK);
+  if (data.restaurantName) {
+    lines.push(center(data.restaurantName.toUpperCase()));
+  }
+  lines.push(center('MUTFAK FISi'));
+  lines.push(THICK);
+
+  // Masa + order number on same line
+  const orderTag = data.orderNumber ? `#${data.orderNumber}` : '';
+  const masaLabel = 'Masa  :';
+  const masaVal = data.tableName;
+  const tagPad = W - masaLabel.length - 1 - masaVal.length - orderTag.length;
+  lines.push(`${masaLabel} ${masaVal}${tagPad > 0 ? ' '.repeat(tagPad) : ' '}${orderTag}`);
+
+  lines.push(row('Saat  :', fmtTime(data.date)));
+  if (data.staffName) {
+    lines.push(row('Garson:', data.staffName));
+  }
   lines.push(SEP);
 
   for (const item of data.items) {
-    lines.push(`${item.qty}x ${item.name}`);
+    lines.push(`${item.qty}x  ${item.name}`);
     if (item.modifiers && item.modifiers.length > 0) {
       for (const mod of item.modifiers) {
-        lines.push(`   + ${mod}`);
+        lines.push(`    + ${mod}`);
       }
     }
     if (item.note) {
-      lines.push(`   NOT: ${item.note}`);
+      lines.push(`    NOT: ${item.note}`);
     }
   }
 
