@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Order, Payment } from '@/types/pos';
-import { Banknote, CreditCard, SplitSquareHorizontal, Users, Receipt, Printer, Percent, X } from 'lucide-react';
+import { Banknote, CreditCard, SplitSquareHorizontal, Users, Receipt, Printer, Percent, X, Landmark } from 'lucide-react';
 import { formatAdisyon, printReceipt } from '@/lib/receipt';
 
 interface PaymentScreenProps {
@@ -9,14 +9,15 @@ interface PaymentScreenProps {
   restaurantName: string;
   staffName: string;
   onCompletePayment: (amount: number, method: string, discountAmount?: number, discountReason?: string) => void;
+  onPrepayment: (amount: number) => void;
   onClose: () => void;
 }
 
 export default function PaymentScreen({
   order, tableName, restaurantName, staffName,
-  onCompletePayment, onClose,
+  onCompletePayment, onPrepayment, onClose,
 }: PaymentScreenProps) {
-  const [paymentMode, setPaymentMode] = useState<'normal' | 'split_item' | 'split_person'>('normal');
+  const [paymentMode, setPaymentMode] = useState<'normal' | 'split_item' | 'split_person' | 'prepayment'>('normal');
   const [selectedPayItems, setSelectedPayItems] = useState<Set<string>>(new Set());
   const [splitPersonCount, setSplitPersonCount] = useState(2);
   const [showDiscount, setShowDiscount] = useState(false);
@@ -24,6 +25,7 @@ export default function PaymentScreen({
   const [discountValue, setDiscountValue] = useState('');
   const [discountReason, setDiscountReason] = useState('');
   const [confirmPayment, setConfirmPayment] = useState<{ method: string; amount: number; discount: number } | null>(null);
+  const [prepaymentInput, setPrepaymentInput] = useState('');
 
   const totalPaid = (order.payments || []).reduce((sum, p) => sum + p.amount, 0);
   const totalPrepayment = order.prepayment || 0;
@@ -194,17 +196,50 @@ export default function PaymentScreen({
           </div>
 
           {/* Payment mode tabs */}
-          <div className="flex gap-1 p-3 border-b">
-            <button onClick={() => setPaymentMode('normal')} className={`flex-1 py-2 rounded-lg text-xs font-bold pos-btn ${paymentMode === 'normal' ? 'bg-primary text-primary-foreground' : 'bg-muted'}`}>
+          <div className="flex gap-1 p-3 border-b flex-wrap">
+            <button onClick={() => setPaymentMode('normal')} className={`flex-1 min-w-[72px] py-2 rounded-lg text-xs font-bold pos-btn ${paymentMode === 'normal' ? 'bg-primary text-primary-foreground' : 'bg-muted'}`}>
               <Receipt className="w-3.5 h-3.5 mx-auto mb-0.5" /> Tam Ödeme
             </button>
-            <button onClick={() => setPaymentMode('split_item')} className={`flex-1 py-2 rounded-lg text-xs font-bold pos-btn ${paymentMode === 'split_item' ? 'bg-primary text-primary-foreground' : 'bg-muted'}`}>
+            <button onClick={() => setPaymentMode('split_item')} className={`flex-1 min-w-[72px] py-2 rounded-lg text-xs font-bold pos-btn ${paymentMode === 'split_item' ? 'bg-primary text-primary-foreground' : 'bg-muted'}`}>
               <SplitSquareHorizontal className="w-3.5 h-3.5 mx-auto mb-0.5" /> Ürüne Göre
             </button>
-            <button onClick={() => setPaymentMode('split_person')} className={`flex-1 py-2 rounded-lg text-xs font-bold pos-btn ${paymentMode === 'split_person' ? 'bg-primary text-primary-foreground' : 'bg-muted'}`}>
+            <button onClick={() => setPaymentMode('split_person')} className={`flex-1 min-w-[72px] py-2 rounded-lg text-xs font-bold pos-btn ${paymentMode === 'split_person' ? 'bg-primary text-primary-foreground' : 'bg-muted'}`}>
               <Users className="w-3.5 h-3.5 mx-auto mb-0.5" /> Kişiye Göre
             </button>
+            <button onClick={() => setPaymentMode('prepayment')} className={`flex-1 min-w-[72px] py-2 rounded-lg text-xs font-bold pos-btn ${paymentMode === 'prepayment' ? 'bg-pos-warning text-pos-warning-foreground' : 'bg-muted'}`}>
+              <Landmark className="w-3.5 h-3.5 mx-auto mb-0.5" /> Ön Ödeme
+            </button>
           </div>
+
+          {/* Prepayment section */}
+          {paymentMode === 'prepayment' && (
+            <div className="p-3 border-b space-y-3">
+              <p className="text-xs font-bold text-muted-foreground uppercase">Ön Ödeme Tutarı</p>
+              {(order.prepayment || 0) > 0 && (
+                <div className="px-3 py-2 rounded-lg bg-pos-success/10 border border-pos-success/20 text-sm text-pos-success font-semibold">
+                  Mevcut ön ödeme: {order.prepayment} ₺
+                </div>
+              )}
+              <input
+                value={prepaymentInput}
+                onChange={e => setPrepaymentInput(e.target.value)}
+                placeholder="Tutar girin (örn: 100)"
+                type="number"
+                className="w-full px-4 py-2.5 rounded-xl border bg-card text-sm"
+                autoFocus
+              />
+              <button
+                onClick={() => {
+                  const amt = Number(prepaymentInput);
+                  if (amt > 0) { onPrepayment(amt); setPrepaymentInput(''); }
+                }}
+                disabled={!prepaymentInput || Number(prepaymentInput) <= 0}
+                className="w-full py-3 rounded-xl bg-pos-warning text-pos-warning-foreground font-bold text-sm pos-btn disabled:opacity-40"
+              >
+                Ön Ödeme Al — {prepaymentInput ? `${prepaymentInput} ₺` : ''}
+              </button>
+            </div>
+          )}
 
           {/* Split by item */}
           {paymentMode === 'split_item' && (

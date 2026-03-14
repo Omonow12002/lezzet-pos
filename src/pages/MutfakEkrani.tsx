@@ -8,10 +8,10 @@ import { playNotification } from '@/lib/sound';
 import { formatKitchenTicket, printReceipt } from '@/lib/receipt';
 import { supabase } from '@/lib/supabase';
 
-const KITCHEN_COLUMNS: { status: OrderStatus; label: string; emoji: string; borderClass: string }[] = [
-  { status: 'sent_to_kitchen', label: 'Yeni Sipariş', emoji: '🔴', borderClass: 'border-pos-danger' },
-  { status: 'preparing',       label: 'Hazırlanıyor',  emoji: '🟡', borderClass: 'border-pos-warning' },
-  { status: 'ready',           label: 'Hazır',          emoji: '🟢', borderClass: 'border-pos-success' },
+const KITCHEN_COLUMNS: { status: OrderStatus; label: string; emoji: string; borderClass: string; bgClass: string }[] = [
+  { status: 'sent_to_kitchen', label: 'Yeni Sipariş', emoji: '🔴', borderClass: 'border-pos-danger',  bgClass: 'bg-pos-danger/5'  },
+  { status: 'preparing',       label: 'Hazırlanıyor',  emoji: '🟡', borderClass: 'border-pos-warning', bgClass: 'bg-pos-warning/5' },
+  { status: 'ready',           label: 'Hazır',          emoji: '🟢', borderClass: 'border-pos-success', bgClass: 'bg-pos-success/5' },
 ];
 
 function useElapsedTime(date: Date) {
@@ -27,17 +27,10 @@ function useElapsedTime(date: Date) {
 
 // ── Cancel reason modal ─────────────────────────────────────────────────────
 
-interface CancelTarget {
-  orderId: string;
-  tableName: string;
-  orderTag: string;
-}
+interface CancelTarget { orderId: string; tableName: string; orderTag: string; }
 
 function CancelModal({
-  target,
-  restaurantId,
-  onConfirm,
-  onClose,
+  target, restaurantId, onConfirm, onClose,
 }: {
   target: CancelTarget;
   restaurantId: string;
@@ -63,21 +56,14 @@ function CancelModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
       <div className="bg-card rounded-2xl border shadow-2xl w-full max-w-sm mx-4 overflow-hidden">
-        {/* Header */}
         <div className="flex items-center gap-3 px-5 py-4 border-b bg-pos-danger/10">
           <AlertTriangle className="w-5 h-5 text-pos-danger shrink-0" />
           <div className="flex-1 min-w-0">
             <p className="font-black text-base">Sipariş İptali</p>
-            <p className="text-xs text-muted-foreground truncate">
-              {target.tableName} &bull; #{target.orderTag}
-            </p>
+            <p className="text-xs text-muted-foreground truncate">{target.tableName} &bull; #{target.orderTag}</p>
           </div>
-          <button onClick={onClose} className="p-1 rounded-lg hover:bg-muted pos-btn">
-            <X className="w-4 h-4" />
-          </button>
+          <button onClick={onClose} className="p-1 rounded-lg hover:bg-muted pos-btn"><X className="w-4 h-4" /></button>
         </div>
-
-        {/* Body */}
         <div className="px-5 py-4 space-y-2">
           <label className="text-sm font-medium">İptal açıklaması</label>
           <textarea
@@ -90,15 +76,8 @@ function CancelModal({
           />
           <p className="text-xs text-muted-foreground">İsteğe bağlı — raporlarda görünür</p>
         </div>
-
-        {/* Footer */}
         <div className="px-5 py-3 flex gap-2 border-t bg-muted/30">
-          <button
-            onClick={onClose}
-            className="flex-1 py-2.5 rounded-lg border font-bold text-sm pos-btn bg-background"
-          >
-            Geri Dön
-          </button>
+          <button onClick={onClose} className="flex-1 py-2.5 rounded-lg border font-bold text-sm pos-btn bg-background">Geri Dön</button>
           <button
             onClick={handleConfirm}
             disabled={loading}
@@ -112,114 +91,85 @@ function CancelModal({
   );
 }
 
-// ── Order card (paper ticket format) ───────────────────────────────────────
+// ── Order card (clean UI, ticket format only for print) ────────────────────
 
 const OrderCard = memo(function OrderCard({
-  order,
-  onStatusChange,
-  onCancelRequest,
+  order, onStatusChange, onCancelRequest,
 }: {
   order: Order;
   onStatusChange: (status: OrderStatus) => void;
   onCancelRequest: () => void;
 }) {
   const elapsed = useElapsedTime(order.createdAt);
-  const isUrgent =
-    order.status === 'sent_to_kitchen' &&
-    Date.now() - new Date(order.createdAt).getTime() > 300000;
+  const isUrgent = order.status === 'sent_to_kitchen' && Date.now() - new Date(order.createdAt).getTime() > 300000;
 
-  // Build ticket text — same content shown on screen and printed
-  const ticketText = formatKitchenTicket({
-    tableName: order.tableName,
-    orderNumber: order.id.slice(-4).toUpperCase(),
-    date: new Date(order.createdAt),
-    items: order.items.map(i => ({
-      name: i.menuItem.name,
-      qty: i.quantity,
-      modifiers: i.modifiers.map(m => m.optionName),
-      note: i.note,
-    })),
-  });
-
-  const handlePrint = () => printReceipt(ticketText, `Mutfak - ${order.tableName}`);
+  const handlePrint = () => {
+    const ticket = formatKitchenTicket({
+      tableName: order.tableName,
+      orderNumber: order.id.slice(-4).toUpperCase(),
+      date: new Date(order.createdAt),
+      items: order.items.map(i => ({
+        name: i.menuItem.name,
+        qty: i.quantity,
+        modifiers: i.modifiers.map(m => m.optionName),
+        note: i.note,
+      })),
+    });
+    printReceipt(ticket, `Mutfak - ${order.tableName}`);
+  };
 
   return (
-    <div
-      className={`rounded-xl overflow-hidden shadow-md animate-slide-in ${
-        isUrgent ? 'ring-2 ring-pos-danger ring-offset-2' : ''
-      }`}
-    >
-      {/* Paper ticket area — same look as thermal print output */}
-      <div
-        className={`bg-white text-black font-mono text-[11px] leading-snug whitespace-pre px-3 py-3 border-2 ${
-          isUrgent ? 'border-pos-danger' : 'border-gray-800'
-        }`}
-      >
-        {ticketText}
-        {/* Live elapsed time appended below the ticket */}
-        <span className={`block mt-1 text-[10px] ${isUrgent ? 'text-red-600 font-bold' : 'text-gray-500'}`}>
-          ⏱ {elapsed}
-        </span>
+    <div className={`bg-card rounded-xl border-2 overflow-hidden shadow-sm animate-slide-in ${isUrgent ? 'border-pos-danger ring-2 ring-pos-danger/20' : 'border-border'}`}>
+      {/* Header band */}
+      <div className={`px-4 py-2.5 flex items-center justify-between border-b ${isUrgent ? 'bg-pos-danger/10' : 'bg-muted/60'}`}>
+        <span className="font-black text-xl tracking-tight">{order.tableName}</span>
+        <div className="flex items-center gap-2">
+          <span className="text-[10px] font-mono text-muted-foreground">#{order.id.slice(-4).toUpperCase()}</span>
+          <span className={`flex items-center gap-1 text-xs px-2 py-0.5 rounded-full font-semibold ${isUrgent ? 'bg-pos-danger/10 text-pos-danger' : 'bg-background text-muted-foreground border'}`}>
+            <Clock className="w-3 h-3" /> {elapsed}
+          </span>
+        </div>
       </div>
 
-      {/* Action buttons bar — below the paper */}
-      <div className="bg-card border border-t-0 rounded-b-xl px-3 py-2.5 flex gap-2 items-center">
+      {/* Items list */}
+      <div className="px-4 py-3 space-y-2">
+        {order.items.map(item => (
+          <div key={item.id}>
+            <div className="flex items-baseline gap-2">
+              <span className="text-sm font-black text-primary w-6 shrink-0">{item.quantity}x</span>
+              <span className="text-sm font-bold leading-tight">{item.menuItem.name}</span>
+            </div>
+            {item.modifiers.map((m, i) => (
+              <p key={i} className="text-xs text-muted-foreground ml-8">+ {m.optionName}</p>
+            ))}
+            {item.note && (
+              <p className="text-xs font-semibold text-pos-warning ml-8">⚠ {item.note}</p>
+            )}
+          </div>
+        ))}
+      </div>
+
+      {/* Action buttons */}
+      <div className="px-3 pb-3 flex gap-2 items-center">
         {order.status === 'sent_to_kitchen' && (
           <>
-            <button
-              onClick={onCancelRequest}
-              className="py-2 px-3 rounded-lg bg-muted text-muted-foreground font-bold text-sm pos-btn border"
-            >
-              İptal
-            </button>
-            <button
-              onClick={() => onStatusChange('preparing')}
-              className="flex-1 py-2 rounded-lg bg-pos-warning text-pos-warning-foreground font-bold text-sm pos-btn"
-            >
-              🍳 Hazırlanıyor
-            </button>
+            <button onClick={onCancelRequest} className="py-2 px-3 rounded-lg bg-muted text-muted-foreground font-bold text-sm pos-btn border">İptal</button>
+            <button onClick={() => onStatusChange('preparing')} className="flex-1 py-2 rounded-lg bg-pos-warning text-pos-warning-foreground font-bold text-sm pos-btn">🍳 Hazırlanıyor</button>
           </>
         )}
-
         {order.status === 'preparing' && (
           <>
-            <button
-              onClick={onCancelRequest}
-              className="py-2 px-3 rounded-lg bg-muted text-muted-foreground font-bold text-sm pos-btn border"
-            >
-              İptal
-            </button>
-            <button
-              onClick={() => onStatusChange('ready')}
-              className="flex-1 py-2 rounded-lg bg-pos-success text-pos-success-foreground font-bold text-sm pos-btn"
-            >
-              ✅ Hazır
-            </button>
+            <button onClick={onCancelRequest} className="py-2 px-3 rounded-lg bg-muted text-muted-foreground font-bold text-sm pos-btn border">İptal</button>
+            <button onClick={() => onStatusChange('ready')} className="flex-1 py-2 rounded-lg bg-pos-success text-pos-success-foreground font-bold text-sm pos-btn">✅ Hazır</button>
           </>
         )}
-
         {order.status === 'ready' && (
           <>
-            <button
-              onClick={onCancelRequest}
-              className="py-2 px-3 rounded-lg bg-muted text-muted-foreground font-bold text-sm pos-btn border"
-            >
-              İptal
-            </button>
-            <button
-              onClick={() => onStatusChange('waiting_payment')}
-              className="flex-1 py-2 rounded-lg bg-primary text-primary-foreground font-bold text-sm pos-btn"
-            >
-              🤝 Teslim Edildi
-            </button>
+            <button onClick={onCancelRequest} className="py-2 px-3 rounded-lg bg-muted text-muted-foreground font-bold text-sm pos-btn border">İptal</button>
+            <button onClick={() => onStatusChange('waiting_payment')} className="flex-1 py-2 rounded-lg bg-primary text-primary-foreground font-bold text-sm pos-btn">🤝 Teslim Edildi</button>
           </>
         )}
-
-        <button
-          onClick={handlePrint}
-          className="p-2 rounded-lg bg-muted hover:bg-muted/80 pos-btn border"
-          title="Fişi Yazdır"
-        >
+        <button onClick={handlePrint} className="p-2 rounded-lg bg-muted hover:bg-muted/80 pos-btn border" title="Fişi Yazdır">
           <Printer className="w-4 h-4" />
         </button>
       </div>
@@ -236,8 +186,8 @@ export default function MutfakEkrani() {
 
   const [cancelTarget, setCancelTarget] = useState<CancelTarget | null>(null);
 
-  const kitchenOrders = orders.filter(
-    o => o.status === 'sent_to_kitchen' || o.status === 'preparing' || o.status === 'ready'
+  const kitchenOrders = orders.filter(o =>
+    o.status === 'sent_to_kitchen' || o.status === 'preparing' || o.status === 'ready'
   );
   const newCount = kitchenOrders.filter(o => o.status === 'sent_to_kitchen').length;
 
@@ -275,20 +225,15 @@ export default function MutfakEkrani() {
     <div className="h-screen flex flex-col overflow-hidden bg-background">
       <header className="flex items-center gap-3 px-4 py-3 bg-card border-b shrink-0">
         <button
-          onClick={() => {
-            const s = (JSON.parse(localStorage.getItem('auth_session') || '{}')).slug || '';
-            logout();
-            navigate(`/pos/${s}`);
-          }}
-          className="p-2 rounded-lg hover:bg-muted pos-btn"
-          title="Çıkış"
+          onClick={() => { const s = (JSON.parse(localStorage.getItem('auth_session') || '{}')).slug || ''; logout(); navigate(`/pos/${s}`); }}
+          className="p-2 rounded-lg hover:bg-muted pos-btn" title="Çıkış"
         >
           <LogOut className="w-5 h-5" />
         </button>
         <ChefHat className="w-6 h-6 text-primary" />
         <h1 className="text-xl font-black">Mutfak Ekranı</h1>
         {newCount > 0 && (
-          <span className="ml-auto px-3 py-1 rounded-full bg-pos-danger text-pos-danger-foreground text-sm font-bold animate-pulse">
+          <span className="ml-auto px-3 py-1 rounded-full bg-pos-danger text-pos-danger-foreground text-sm font-bold">
             {newCount} yeni
           </span>
         )}
@@ -298,12 +243,10 @@ export default function MutfakEkrani() {
         {KITCHEN_COLUMNS.map(col => {
           const colOrders = kitchenOrders.filter(o => o.status === col.status);
           return (
-            <div key={col.status} className="flex-1 min-w-[300px] flex flex-col">
-              <h2
-                className={`text-sm font-black uppercase tracking-wider mb-3 pb-2 border-b-2 ${col.borderClass} flex items-center gap-2`}
-              >
-                <span>{col.emoji}</span> {col.label}{' '}
-                <span className="text-muted-foreground font-medium">({colOrders.length})</span>
+            <div key={col.status} className={`flex-1 min-w-[280px] flex flex-col rounded-xl ${col.bgClass} p-3`}>
+              <h2 className={`text-xs font-black uppercase tracking-wider mb-3 pb-2 border-b-2 ${col.borderClass} flex items-center gap-2`}>
+                <span>{col.emoji}</span> {col.label}
+                <span className="ml-auto text-muted-foreground font-medium">{colOrders.length}</span>
               </h2>
               <div className="flex-1 overflow-y-auto space-y-3 scrollbar-thin">
                 {colOrders.length === 0 ? (
@@ -314,13 +257,7 @@ export default function MutfakEkrani() {
                       key={order.id}
                       order={order}
                       onStatusChange={status => handleStatusChange(order.id, status)}
-                      onCancelRequest={() =>
-                        setCancelTarget({
-                          orderId: order.id,
-                          tableName: order.tableName,
-                          orderTag: order.id.slice(-4).toUpperCase(),
-                        })
-                      }
+                      onCancelRequest={() => setCancelTarget({ orderId: order.id, tableName: order.tableName, orderTag: order.id.slice(-4).toUpperCase() })}
                     />
                   ))
                 )}

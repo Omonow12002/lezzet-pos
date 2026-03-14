@@ -1,4 +1,4 @@
-﻿import React, { createContext, useContext, useState, useCallback, useEffect, useRef } from 'react';
+import React, { createContext, useContext, useState, useCallback, useEffect, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import {
   Category, MenuItem, Table, Order, OrderItem, OrderStatus,
@@ -95,14 +95,16 @@ function mapTable(row: Record<string, unknown>, floorMap: Map<string, string>): 
   };
 }
 
-function mapOrderItem(row: Record<string, unknown>): OrderItem {
+function mapOrderItem(row: Record<string, unknown>, lookup?: Map<string, MenuItem>): OrderItem {
+  const menuItemId = (row.menu_item_id as string) || '';
+  const found = lookup?.get(menuItemId);
   return {
     id: row.id as string,
     menuItem: {
-      id: (row.menu_item_id as string) || '',
-      name: row.menu_item_name as string,
-      price: Number(row.menu_item_price),
-      categoryId: '',
+      id: menuItemId,
+      name: (row.menu_item_name as string) || found?.name || '',
+      price: Number(row.menu_item_price) || found?.price || 0,
+      categoryId: found?.categoryId || '',
     },
     quantity: Number(row.quantity),
     modifiers: (row.modifiers as OrderItem['modifiers']) || [],
@@ -177,6 +179,7 @@ export function POSProvider({ restaurantId, staffId, children }: POSProviderProp
   const [loading, setLoading] = useState(true);
   const [categories, setCategories] = useState<Category[]>([]);
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
+  const menuItemsRef = useRef<Map<string, MenuItem>>(new Map());
   const [tables, setTables] = useState<Table[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
   const [modifierGroups, setModifierGroups] = useState<ModifierGroup[]>([]);
@@ -189,6 +192,11 @@ export function POSProvider({ restaurantId, staffId, children }: POSProviderProp
   const reverseFloorMapRef = useRef(new Map<string, string>());
   const ordersRef = useRef(orders);
   ordersRef.current = orders;
+
+  // Keep menuItemsRef in sync so mapOrderItem can look up prices even when columns are null
+  useEffect(() => {
+    menuItemsRef.current = new Map(menuItems.map(m => [m.id, m]));
+  }, [menuItems]);
 
   // ─── Initial Data Fetch ────────────────────────
 
@@ -247,16 +255,21 @@ export function POSProvider({ restaurantId, staffId, children }: POSProviderProp
         reverseFloorMapRef.current = rMap;
         setFloors((floorsData || []).map((f: Record<string, unknown>) => f.name as string));
 
+        const mappedMenuItems = (itemData || []).map(mapMenuItem);
         setCategories((catData || []).map(mapCategory));
-        setMenuItems((itemData || []).map(mapMenuItem));
+        setMenuItems(mappedMenuItems);
         setTables((tableData || []).map((t: Record<string, unknown>) => mapTable(t, fMap)));
         setModifierGroups((modData || []).map(mapModifierGroup));
+
+        // Build lookup for price fallback (menu_item_price column may be null on old rows)
+        const miLookup = new Map(mappedMenuItems.map(m => [m.id, m]));
+        menuItemsRef.current = miLookup;
 
         const itemsByOrder = new Map<string, OrderItem[]>();
         (orderItemsData || []).forEach((oi: Record<string, unknown>) => {
           const orderId = oi.order_id as string;
           const items = itemsByOrder.get(orderId) || [];
-          items.push(mapOrderItem(oi));
+          items.push(mapOrderItem(oi, miLookup));
           itemsByOrder.set(orderId, items);
         });
 
@@ -322,11 +335,12 @@ export function POSProvider({ restaurantId, staffId, children }: POSProviderProp
     const { data: orderItemsData } = orderIds.length > 0
       ? await supabase.from('order_items').select('*').in('order_id', orderIds)
       : { data: [] as Record<string, unknown>[] };
+    const miLookup = menuItemsRef.current;
     const itemsByOrder = new Map<string, OrderItem[]>();
     (orderItemsData || []).forEach((oi: Record<string, unknown>) => {
       const oid = oi.order_id as string;
       const arr = itemsByOrder.get(oid) || [];
-      arr.push(mapOrderItem(oi));
+      arr.push(mapOrderItem(oi, miLookup));
       itemsByOrder.set(oid, arr);
     });
     const paymentsByOrder = new Map<string, Payment[]>();
@@ -449,14 +463,14 @@ export function POSProvider({ restaurantId, staffId, children }: POSProviderProp
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'order_items', filter: `restaurant_id=eq.${restaurantId}` }, (payload) => {
         if (payload.eventType === 'INSERT') {
-          const newItem = mapOrderItem(payload.new);
+          const newItem = mapOrderItem(payload.new, menuItemsRef.current);
           setOrders(prev => prev.map(o => {
             if (o.id !== payload.new.order_id) return o;
             if (o.items.some(i => i.id === newItem.id)) return o;
             return { ...o, items: [...o.items, newItem] };
           }));
         } else if (payload.eventType === 'UPDATE') {
-          const updatedItem = mapOrderItem(payload.new);
+          const updatedItem = mapOrderItem(payload.new, menuItemsRef.current);
           setOrders(prev => prev.map(o => {
             if (o.id !== payload.new.order_id) return o;
             return { ...o, items: o.items.map(i => i.id === updatedItem.id ? updatedItem : i) };

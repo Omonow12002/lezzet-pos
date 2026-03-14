@@ -1,4 +1,4 @@
-﻿import { useState, useMemo, useCallback, useEffect } from 'react';
+import { useState, useMemo, useCallback, useEffect } from 'react';
 import { usePOS } from '@/context/POSContext';
 import { useAuth } from '@/context/AuthContext';
 import { OrderItem, Table, MenuItem, OrderItemModifier } from '@/types/pos';
@@ -55,6 +55,18 @@ export default function GarsonPOS() {
     const interval = setInterval(() => setTick(t => t + 1), 30000);
     return () => clearInterval(interval);
   }, []);
+
+  // Auto-reset when cashier completes payment — table becomes 'available' via realtime
+  const currentTableInContext = selectedTable ? tables.find(t => t.id === selectedTable.id) : undefined;
+  useEffect(() => {
+    if (selectedTable && currentTableInContext?.status === 'available') {
+      setSelectedTable(null);
+      setOrderItems([]);
+      if (isMobile) setMobileTab('tables');
+      toast.success(`${selectedTable.name} ödeme tamamlandı`);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentTableInContext?.status]);
 
   const handleSelectTable = useCallback((t: Table) => {
     if (t.status === 'waiting_payment') {

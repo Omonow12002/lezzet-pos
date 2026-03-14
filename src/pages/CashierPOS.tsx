@@ -20,7 +20,7 @@ function formatDuration(openedAt?: Date) {
 export default function CashierPOS() {
   const {
     tables, orders, floors, restaurantName, completePayment,
-    staffId,
+    updateOrder, staffId,
   } = usePOS();
   const { session, logout } = useAuth();
   const staffName = session?.name || null;
@@ -80,6 +80,14 @@ export default function CashierPOS() {
     setSelectedOrder(null);
   };
 
+  const handlePrepayment = async (amount: number) => {
+    if (!selectedOrder) return;
+    await updateOrder(selectedOrder.id, { prepayment: (selectedOrder.prepayment || 0) + amount });
+    toast.success(`${amount} ₺ ön ödeme alındı`);
+    setSelectedTable(null);
+    setSelectedOrder(null);
+  };
+
   const waitingPaymentCount = tables.filter(t => t.status === 'waiting_payment').length;
 
   return (
@@ -93,7 +101,7 @@ export default function CashierPOS() {
         <h1 className="text-xl font-black">Kasa POS</h1>
         {staffName && <span className="text-xs text-muted-foreground font-medium ml-1">({staffName})</span>}
         {waitingPaymentCount > 0 && (
-          <span className="ml-auto px-3 py-1 rounded-full bg-pos-warning text-pos-warning-foreground text-sm font-bold animate-pulse">
+          <span className="ml-auto px-3 py-1 rounded-full bg-pos-warning text-pos-warning-foreground text-sm font-bold">
             {waitingPaymentCount} ödeme bekliyor
           </span>
         )}
@@ -130,7 +138,7 @@ export default function CashierPOS() {
                 key={t.id}
                 onClick={() => handleTableTap(t)}
                 className={`relative flex flex-col items-center justify-center p-5 rounded-2xl border-2 ${TABLE_STATUS_BORDER_COLORS[t.status]} bg-card pos-btn transition-all ${
-                  isWaiting ? 'hover:shadow-lg ring-2 ring-pos-warning/30 animate-pulse-slow' : hasOrder ? 'hover:shadow-md' : 'opacity-60'
+                  isWaiting ? 'hover:shadow-lg ring-2 ring-pos-warning/40' : hasOrder ? 'hover:shadow-md' : 'opacity-60'
                 }`}
               >
                 <span className={`absolute top-2 right-2 w-3 h-3 rounded-full ${TABLE_STATUS_COLORS[t.status]}`} />
@@ -173,6 +181,7 @@ export default function CashierPOS() {
           restaurantName={restaurantName}
           staffName={staffName || ''}
           onCompletePayment={handleCompletePayment}
+          onPrepayment={handlePrepayment}
           onClose={handleClosePayment}
         />
       )}
