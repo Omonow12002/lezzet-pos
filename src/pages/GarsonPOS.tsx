@@ -41,6 +41,7 @@ export default function GarsonPOS() {
   const [selectedCategory, setSelectedCategory] = useState(categories[0]?.id || '');
   const [selectedFloor, setSelectedFloor] = useState(floors[0]);
   const [orderItems, setOrderItems] = useState<OrderItem[]>([]);
+  const draftItemsRef = useRef<Map<string, OrderItem[]>>(new Map());
   const [showModifierModal, setShowModifierModal] = useState(false);
   const [pendingItem, setPendingItem] = useState<MenuItem | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -67,6 +68,7 @@ export default function GarsonPOS() {
     prevTableStatusRef.current = curr;
     // Only fire if we were tracking a non-available state and it just became available
     if (selectedTable && curr === 'available' && prev !== undefined && prev !== 'available') {
+      draftItemsRef.current.delete(selectedTable.id);
       setSelectedTable(null);
       setOrderItems([]);
       if (isMobile) setMobileTab('tables');
@@ -75,21 +77,41 @@ export default function GarsonPOS() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentTableInContext?.status]);
 
+  const saveDrafts = useCallback((tableId: string, items: OrderItem[]) => {
+    const unsent = items.filter(i => !i.sentToKitchen);
+    if (unsent.length > 0) {
+      draftItemsRef.current.set(tableId, unsent);
+    } else {
+      draftItemsRef.current.delete(tableId);
+    }
+  }, []);
+
+  const leaveTable = useCallback(() => {
+    if (selectedTable) {
+      saveDrafts(selectedTable.id, orderItems);
+    }
+    setSelectedTable(null);
+    setOrderItems([]);
+    if (isMobile) setMobileTab('tables');
+  }, [selectedTable, orderItems, saveDrafts, isMobile]);
+
   const handleSelectTable = useCallback((t: Table) => {
     if (t.status === 'waiting_payment') {
       toast.info('Ödeme bekleniyor — müşteriyi kasaya yönlendirin');
       return;
     }
+    if (selectedTable) {
+      saveDrafts(selectedTable.id, orderItems);
+    }
     setSelectedTable(t);
     const existingOrders = getTableOrders(t.id);
-    if (existingOrders.length > 0) {
-      const allItems = existingOrders.flatMap(o => o.items.map(i => ({ ...i, sentToKitchen: true })));
-      setOrderItems(allItems);
-    } else {
-      setOrderItems([]);
-    }
+    const sentItems = existingOrders.length > 0
+      ? existingOrders.flatMap(o => o.items.map(i => ({ ...i, sentToKitchen: true })))
+      : [];
+    const drafts = draftItemsRef.current.get(t.id) || [];
+    setOrderItems([...sentItems, ...drafts]);
     if (isMobile) setMobileTab('menu');
-  }, [getTableOrders, isMobile]);
+  }, [getTableOrders, isMobile, selectedTable, orderItems, saveDrafts]);
 
   const total = useMemo(
     () => orderItems.reduce((sum, i) => {
@@ -204,6 +226,7 @@ export default function GarsonPOS() {
     setTableTotal(selectedTable.id, total);
     toast.success('Siparis mutfaga gonderildi!');
     playSuccess();
+    draftItemsRef.current.delete(selectedTable.id);
     setSelectedTable(null);
     setOrderItems([]);
     if (isMobile) setMobileTab('tables');
@@ -217,6 +240,7 @@ export default function GarsonPOS() {
     } else {
       setOrderItems([]);
     }
+    if (selectedTable) draftItemsRef.current.delete(selectedTable.id);
   };
 
   const printAdisyon = () => {
@@ -238,6 +262,15 @@ export default function GarsonPOS() {
       'Adisyon'
     );
   };
+
+  useEffect(() => {
+    for (const [tableId] of draftItemsRef.current) {
+      const t = tables.find(tb => tb.id === tableId);
+      if (!t || t.status === 'available') {
+        draftItemsRef.current.delete(tableId);
+      }
+    }
+  }, [tables]);
 
   const handleSelectCategory = (catId: string) => {
     setSelectedCategory(catId);
@@ -298,7 +331,7 @@ export default function GarsonPOS() {
                 onToggleSearch={() => { setShowSearch(!showSearch); setSearchQuery(''); }}
                 onSearchChange={setSearchQuery}
                 onItemTap={handleItemTap}
-                onBackToTables={() => { setSelectedTable(null); setMobileTab('tables'); }}
+                onBackToTables={leaveTable}
               />
             </div>
           )}
@@ -476,7 +509,7 @@ export default function GarsonPOS() {
             onToggleSearch={() => { setShowSearch(!showSearch); setSearchQuery(''); }}
             onSearchChange={setSearchQuery}
             onItemTap={handleItemTap}
-            onBackToTables={() => setSelectedTable(null)}
+            onBackToTables={leaveTable}
           />
         )}
 
