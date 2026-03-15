@@ -202,9 +202,11 @@ export default function GarsonPOS() {
     }
     openTable(selectedTable.id);
     setTableTotal(selectedTable.id, total);
-    setOrderItems(prev => prev.map(i => ({ ...i, sentToKitchen: true })));
     toast.success('Siparis mutfaga gonderildi!');
     playSuccess();
+    setSelectedTable(null);
+    setOrderItems([]);
+    if (isMobile) setMobileTab('tables');
   };
 
   const clearOrder = () => {
@@ -328,6 +330,17 @@ export default function GarsonPOS() {
           )}
         </div>
 
+        {/* Floating Cart Bar */}
+        {mobileTab === 'menu' && newItemCount > 0 && (
+          <div
+            onClick={() => setMobileTab('order')}
+            className="shrink-0 border-t bg-primary text-primary-foreground px-4 py-3 flex items-center justify-between cursor-pointer active:opacity-90"
+          >
+            <span className="font-bold">{newItemCount} ürün &middot; {total} TL</span>
+            <span className="text-sm font-semibold">Sepeti Gör &rarr;</span>
+          </div>
+        )}
+
         {/* Mobile Bottom Tab Bar */}
         <nav className="shrink-0 border-t bg-card flex">
           <button
@@ -424,24 +437,26 @@ export default function GarsonPOS() {
       </header>
 
       <div className="flex flex-1 min-h-0">
-        <OrderPanel
-          selectedTable={selectedTable}
-          orderItems={orderItems}
-          total={total}
-          totalPaid={totalPaid}
-          totalPrepayment={totalPrepayment}
-          remainingAmount={remainingAmount}
-          editNoteId={editNoteId}
-          editNoteText={editNoteText}
-          onUpdateQty={handleUpdateQty}
-          onRemoveItem={handleRemoveItem}
-          onEditNote={handleEditNote}
-          onSaveNote={handleSaveNote}
-          onEditNoteTextChange={setEditNoteText}
-          onSendToKitchen={sendToKitchen}
-          onClearOrder={clearOrder}
-          onPrintAdisyon={printAdisyon}
-        />
+        {selectedTable && (
+          <OrderPanel
+            selectedTable={selectedTable}
+            orderItems={orderItems}
+            total={total}
+            totalPaid={totalPaid}
+            totalPrepayment={totalPrepayment}
+            remainingAmount={remainingAmount}
+            editNoteId={editNoteId}
+            editNoteText={editNoteText}
+            onUpdateQty={handleUpdateQty}
+            onRemoveItem={handleRemoveItem}
+            onEditNote={handleEditNote}
+            onSaveNote={handleSaveNote}
+            onEditNoteTextChange={setEditNoteText}
+            onSendToKitchen={sendToKitchen}
+            onClearOrder={clearOrder}
+            onPrintAdisyon={printAdisyon}
+          />
+        )}
 
         {!selectedTable ? (
           <TableGrid

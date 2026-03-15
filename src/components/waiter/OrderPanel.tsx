@@ -94,11 +94,11 @@ export default function OrderPanel({
                   </div>
                   <div className="flex flex-col items-center gap-1 shrink-0">
                     <div className="flex items-center gap-1">
-                      <button onClick={() => onUpdateQty(item.id, -1)} className="w-10 h-10 rounded-lg bg-card border flex items-center justify-center pos-btn">
+                      <button onClick={() => onUpdateQty(item.id, -1)} className="w-11 h-11 rounded-lg bg-card border flex items-center justify-center pos-btn">
                         <Minus className="w-4 h-4" />
                       </button>
                       <span className="w-7 text-center text-sm font-bold">{item.quantity}</span>
-                      <button onClick={() => onUpdateQty(item.id, 1)} className="w-10 h-10 rounded-lg bg-card border flex items-center justify-center pos-btn">
+                      <button onClick={() => onUpdateQty(item.id, 1)} className="w-11 h-11 rounded-lg bg-card border flex items-center justify-center pos-btn">
                         <Plus className="w-4 h-4" />
                       </button>
                     </div>
@@ -132,7 +132,7 @@ export default function OrderPanel({
         <button
           onClick={onSendToKitchen}
           disabled={!selectedTable || orderItems.length === 0}
-          className="w-full py-3.5 rounded-xl bg-primary text-primary-foreground font-bold text-base flex items-center justify-center gap-2 pos-btn disabled:opacity-40 disabled:cursor-not-allowed shadow-lg shadow-primary/20"
+          className="w-full py-4 rounded-xl bg-primary text-primary-foreground font-bold text-lg flex items-center justify-center gap-2 pos-btn disabled:opacity-40 disabled:cursor-not-allowed shadow-lg shadow-primary/20"
         >
           <Send className="w-5 h-5" /> Mutfağa Gönder
         </button>

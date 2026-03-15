@@ -31,9 +31,9 @@ const TableCard = memo(function TableCard({ table, prepay, onSelect }: {
     <button
       onClick={onSelect}
       disabled={isLocked}
-      className={`relative flex flex-col items-center justify-center p-5 rounded-2xl border-2 ${TABLE_STATUS_BORDER_COLORS[table.status]} bg-card hover:shadow-lg pos-btn transition-shadow ${isLocked ? 'opacity-70 cursor-not-allowed' : ''}`}
+      className={`relative flex flex-col items-center justify-center p-6 rounded-2xl border-2 min-h-[100px] ${TABLE_STATUS_BORDER_COLORS[table.status]} bg-card hover:shadow-lg pos-btn transition-shadow ${isLocked ? 'opacity-70 cursor-not-allowed' : ''}`}
     >
-      <span className={`absolute top-2 right-2 w-3 h-3 rounded-full ${TABLE_STATUS_COLORS[table.status]}`} />
+      <div className={`absolute top-0 left-0 right-0 h-1.5 rounded-t-2xl ${TABLE_STATUS_COLORS[table.status]}`} />
       <span className="text-2xl font-black text-foreground">{table.name.replace('Masa ', '')}</span>
       <span className="text-xs text-muted-foreground mt-1">{table.name}</span>
       {table.currentTotal != null && table.currentTotal > 0 && (
@@ -75,7 +75,7 @@ export default function TableGrid({ tables, orders, floors, selectedFloor, onSel
           </button>
         ))}
       </div>
-      <div className="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 flex-1 content-start overflow-y-auto">
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 flex-1 content-start overflow-y-auto">
         {floorTables.map(t => {
           const tOrders = orders.filter(o => o.tableId === t.id && o.status !== 'paid' && o.status !== 'closed');
           const tPrepay = tOrders.reduce((sum, o) => sum + (o.prepayment || 0), 0);
