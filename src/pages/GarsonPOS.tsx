@@ -101,8 +101,8 @@ export default function GarsonPOS() {
 
   const tableOrders = selectedTable ? orders.filter(o => o.tableId === selectedTable.id && o.status !== 'paid' && o.status !== 'closed') : [];
   const totalPaid = tableOrders.reduce((sum, o) => sum + (o.payments || []).reduce((s, p) => s + p.amount, 0), 0);
-  const totalPrepayment = tableOrders.reduce((sum, o) => sum + (o.prepayment || 0), 0);
-  const remainingAmount = Math.max(0, total - totalPaid - totalPrepayment);
+  const totalPrepayment = tableOrders.reduce((sum, o) => (o.payments || []).filter(p => p.type === 'prepayment').reduce((s, p) => s + p.amount, sum), 0);
+  const remainingAmount = Math.max(0, total - totalPaid);
 
   const newItemCount = orderItems.filter(i => !i.sentToKitchen).length;
 

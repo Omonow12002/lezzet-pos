@@ -8,6 +8,10 @@ export type OrderStatus = 'created' | 'sent_to_kitchen' | 'preparing' | 'ready' 
 
 export type PaymentMethod = 'nakit' | 'kredi_karti' | 'bolunmus' | 'discount';
 
+export type PaymentType = 'payment' | 'prepayment';
+
+export type OrderItemPaymentStatus = 'unpaid' | 'paid';
+
 export type OrderItemStatus = 'pending' | 'sent' | 'preparing' | 'ready' | 'cancelled';
 
 export type OrderSource = 'pos' | 'qr';
@@ -96,6 +100,7 @@ export interface OrderItem {
   note?: string;
   sentToKitchen?: boolean;
   status?: OrderItemStatus;
+  paymentStatus?: OrderItemPaymentStatus;
 }
 
 export interface Payment {
@@ -103,6 +108,7 @@ export interface Payment {
   orderId: string;
   amount: number;
   method: PaymentMethod;
+  type: PaymentType;
   createdAt: Date;
   staffId?: string;
   discountAmount?: number;

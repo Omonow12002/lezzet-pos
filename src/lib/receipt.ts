@@ -43,7 +43,9 @@ export interface AdisyonData {
   date: Date;
   items: { name: string; qty: number; unitPrice: number }[];
   total: number;
-  // FUTURE: vatLines?: { rate: number; amount: number }[];
+  paymentMethod?: string;
+  paidAmount?: number;
+  remainingAmount?: number;
 }
 
 export function formatAdisyon(data: AdisyonData): string {
@@ -72,6 +74,15 @@ export function formatAdisyon(data: AdisyonData): string {
 
   lines.push(SEP);
   lines.push(row('TOPLAM', fmtTL(data.total)));
+  if (data.paymentMethod) {
+    lines.push(row('Odeme:', data.paymentMethod));
+  }
+  if (data.paidAmount !== undefined && data.paidAmount > 0) {
+    lines.push(row('Odenen:', fmtTL(data.paidAmount)));
+  }
+  if (data.remainingAmount !== undefined && data.remainingAmount > 0) {
+    lines.push(row('Kalan:', fmtTL(data.remainingAmount)));
+  }
   lines.push('');
   lines.push(center('Tesekkur ederiz!'));
   lines.push('');

@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import { Order, Payment } from '@/types/pos';
-import { Banknote, CreditCard, SplitSquareHorizontal, Users, Receipt, Printer, Percent, X, Landmark } from 'lucide-react';
+import { Order } from '@/types/pos';
+import { Banknote, CreditCard, SplitSquareHorizontal, Users, Receipt, Printer, Percent, X, Landmark, Check } from 'lucide-react';
 import { formatAdisyon, printReceipt } from '@/lib/receipt';
 
 interface PaymentScreenProps {
@@ -10,12 +10,13 @@ interface PaymentScreenProps {
   staffName: string;
   onCompletePayment: (amount: number, method: string, discountAmount?: number, discountReason?: string) => void;
   onPrepayment: (amount: number) => void;
+  onPayOrderItems?: (itemIds: string[], amount: number, method: string, discountAmount?: number, discountReason?: string) => void;
   onClose: () => void;
 }
 
 export default function PaymentScreen({
   order, tableName, restaurantName, staffName,
-  onCompletePayment, onPrepayment, onClose,
+  onCompletePayment, onPrepayment, onPayOrderItems, onClose,
 }: PaymentScreenProps) {
   const [paymentMode, setPaymentMode] = useState<'normal' | 'split_item' | 'split_person' | 'prepayment'>('normal');
   const [selectedPayItems, setSelectedPayItems] = useState<Set<string>>(new Set());
@@ -27,8 +28,10 @@ export default function PaymentScreen({
   const [confirmPayment, setConfirmPayment] = useState<{ method: string; amount: number; discount: number } | null>(null);
   const [prepaymentInput, setPrepaymentInput] = useState('');
 
-  const totalPaid = (order.payments || []).reduce((sum, p) => sum + p.amount, 0);
-  const totalPrepayment = order.prepayment || 0;
+  const allPayments = order.payments || [];
+  const totalPaid = allPayments.reduce((sum, p) => sum + p.amount, 0);
+  const prepaymentTotal = allPayments.filter(p => p.type === 'prepayment').reduce((sum, p) => sum + p.amount, 0);
+  const paymentTotal = allPayments.filter(p => p.type === 'payment').reduce((sum, p) => sum + p.amount, 0);
 
   const discountAmount = discountValue
     ? discountType === 'percentage'
@@ -37,7 +40,7 @@ export default function PaymentScreen({
     : 0;
 
   const effectiveTotal = Math.max(0, order.total - discountAmount);
-  const remainingAmount = Math.max(0, effectiveTotal - totalPaid - totalPrepayment);
+  const remainingAmount = Math.max(0, effectiveTotal - totalPaid);
 
   const getPayAmount = () => {
     if (paymentMode === 'split_item') {
@@ -67,15 +70,20 @@ export default function PaymentScreen({
     if (!confirmPayment) return;
     const methodMap: Record<string, string> = {
       'Nakit': 'nakit',
-      'Kredi Kartı': 'kredi_karti',
-      'Bölünmüş': 'bolunmus',
+      'Kredi Karti': 'kredi_karti',
+      'Bolunmus': 'bolunmus',
     };
-    onCompletePayment(
-      confirmPayment.amount,
-      methodMap[confirmPayment.method] || 'nakit',
-      confirmPayment.discount > 0 ? confirmPayment.discount : undefined,
-      confirmPayment.discount > 0 ? (discountReason || `${discountType === 'percentage' ? `%${discountValue}` : `${discountValue} TL`} indirim`) : undefined,
-    );
+    const dbMethod = methodMap[confirmPayment.method] || 'nakit';
+    const disc = confirmPayment.discount > 0 ? confirmPayment.discount : undefined;
+    const discReason = confirmPayment.discount > 0
+      ? (discountReason || `${discountType === 'percentage' ? `%${discountValue}` : `${discountValue} TL`} indirim`)
+      : undefined;
+
+    if (paymentMode === 'split_item' && onPayOrderItems && selectedPayItems.size > 0) {
+      onPayOrderItems(Array.from(selectedPayItems), confirmPayment.amount, dbMethod, disc, discReason);
+    } else {
+      onCompletePayment(confirmPayment.amount, dbMethod, disc, discReason);
+    }
   };
 
   const handlePrintReceipt = () => {
@@ -175,27 +183,32 @@ export default function PaymentScreen({
               : `${remainingAmount} ₺`
             }
           </p>
-          {discountAmount > 0 && <p className="text-xs text-pos-warning font-semibold mt-1">İndirim: -{discountAmount} ₺</p>}
-          {totalPrepayment > 0 && <p className="text-xs text-blue-500 mt-1 font-semibold">Ön Ödeme: -{totalPrepayment} ₺</p>}
-          {totalPaid > 0 && <p className="text-xs text-pos-success mt-1 font-semibold">Ödenen: {totalPaid} ₺</p>}
-          {(totalPrepayment > 0 || totalPaid > 0) && (
-            <p className="text-xs text-muted-foreground mt-0.5">Kalan: <span className="font-black text-foreground">{remainingAmount} ₺</span></p>
+          {discountAmount > 0 && <p className="text-xs text-pos-warning font-semibold mt-1">Indirim: -{discountAmount} TL</p>}
+          {prepaymentTotal > 0 && <p className="text-xs text-blue-500 mt-1 font-semibold">On Odeme: -{prepaymentTotal} TL</p>}
+          {paymentTotal > 0 && <p className="text-xs text-pos-success mt-1 font-semibold">Odenen: {paymentTotal} TL</p>}
+          {totalPaid > 0 && (
+            <p className="text-xs text-muted-foreground mt-0.5">Kalan: <span className="font-black text-foreground">{remainingAmount} TL</span></p>
           )}
         </div>
 
         <div className="overflow-y-auto flex-1 scrollbar-thin">
           {/* Order Items Summary */}
           <div className="p-3 border-b">
-            <p className="text-xs font-bold text-muted-foreground uppercase mb-2">Sipariş Detayı</p>
+            <p className="text-xs font-bold text-muted-foreground uppercase mb-2">Siparis Detayi</p>
             <div className="space-y-1">
-              {order.items.map(item => (
-                <div key={item.id} className="flex items-center justify-between text-sm">
-                  <span>{item.quantity}x {item.menuItem.name}</span>
-                  <span className="font-bold">
-                    {(item.menuItem.price + item.modifiers.reduce((s, m) => s + m.extraPrice, 0)) * item.quantity} ₺
-                  </span>
-                </div>
-              ))}
+              {order.items.map(item => {
+                const isPaid = item.paymentStatus === 'paid';
+                const itemTotal = (item.menuItem.price + item.modifiers.reduce((s, m) => s + m.extraPrice, 0)) * item.quantity;
+                return (
+                  <div key={item.id} className={`flex items-center justify-between text-sm ${isPaid ? 'opacity-50' : ''}`}>
+                    <span className="flex items-center gap-1.5">
+                      {isPaid && <Check className="w-3 h-3 text-pos-success" />}
+                      <span className={isPaid ? 'line-through' : ''}>{item.quantity}x {item.menuItem.name}</span>
+                    </span>
+                    <span className="font-bold">{itemTotal} TL</span>
+                  </div>
+                );
+              })}
             </div>
           </div>
 
@@ -219,9 +232,9 @@ export default function PaymentScreen({
           {paymentMode === 'prepayment' && (
             <div className="p-3 border-b space-y-3">
               <p className="text-xs font-bold text-muted-foreground uppercase">Ön Ödeme Tutarı</p>
-              {(order.prepayment || 0) > 0 && (
+              {prepaymentTotal > 0 && (
                 <div className="px-3 py-2 rounded-lg bg-pos-success/10 border border-pos-success/20 text-sm text-pos-success font-semibold">
-                  Mevcut ön ödeme: {order.prepayment} ₺
+                  Mevcut on odeme: {prepaymentTotal} TL
                 </div>
               )}
               <input
@@ -248,23 +261,35 @@ export default function PaymentScreen({
           {/* Split by item */}
           {paymentMode === 'split_item' && (
             <div className="p-3 border-b space-y-1.5">
-              <p className="text-xs font-bold text-muted-foreground uppercase">Ödenecek ürünleri seçin</p>
-              {order.items.map(item => (
-                <button
-                  key={item.id}
-                  onClick={() => setSelectedPayItems(prev => {
-                    const next = new Set(prev);
-                    next.has(item.id) ? next.delete(item.id) : next.add(item.id);
-                    return next;
-                  })}
-                  className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-sm pos-btn border-2 ${
-                    selectedPayItems.has(item.id) ? 'border-primary bg-primary/10' : 'border-transparent bg-muted/50'
-                  }`}
-                >
-                  <span>{item.quantity}x {item.menuItem.name}</span>
-                  <span className="font-bold">{(item.menuItem.price + item.modifiers.reduce((s, m) => s + m.extraPrice, 0)) * item.quantity} ₺</span>
-                </button>
-              ))}
+              <p className="text-xs font-bold text-muted-foreground uppercase">Odenecek urunleri secin</p>
+              {order.items.map(item => {
+                const isPaid = item.paymentStatus === 'paid';
+                const itemTotal = (item.menuItem.price + item.modifiers.reduce((s, m) => s + m.extraPrice, 0)) * item.quantity;
+                return (
+                  <button
+                    key={item.id}
+                    disabled={isPaid}
+                    onClick={() => setSelectedPayItems(prev => {
+                      const next = new Set(prev);
+                      next.has(item.id) ? next.delete(item.id) : next.add(item.id);
+                      return next;
+                    })}
+                    className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-sm pos-btn border-2 ${
+                      isPaid
+                        ? 'border-pos-success/30 bg-pos-success/5 opacity-60'
+                        : selectedPayItems.has(item.id)
+                        ? 'border-primary bg-primary/10'
+                        : 'border-transparent bg-muted/50'
+                    }`}
+                  >
+                    <span className="flex items-center gap-1.5">
+                      {isPaid && <Check className="w-3.5 h-3.5 text-pos-success" />}
+                      <span className={isPaid ? 'line-through' : ''}>{item.quantity}x {item.menuItem.name}</span>
+                    </span>
+                    <span className="font-bold">{itemTotal} TL</span>
+                  </button>
+                );
+              })}
             </div>
           )}
 

@@ -20,7 +20,7 @@ function formatDuration(openedAt?: Date) {
 export default function CashierPOS() {
   const {
     tables, orders, floors, restaurantName, completePayment,
-    updateOrder, staffId,
+    recordPrepayment, payOrderItems, staffId,
   } = usePOS();
   const { session, logout } = useAuth();
   const staffName = session?.name || null;
@@ -82,8 +82,25 @@ export default function CashierPOS() {
 
   const handlePrepayment = async (amount: number) => {
     if (!selectedOrder) return;
-    await updateOrder(selectedOrder.id, { prepayment: (selectedOrder.prepayment || 0) + amount });
-    toast.success(`${amount} ₺ ön ödeme alındı`);
+    try {
+      await recordPrepayment(selectedOrder.id, amount);
+      toast.success(`${amount} ₺ ön ödeme alındı`);
+    } catch {
+      toast.error('Ön ödeme kaydedilemedi');
+    }
+    setSelectedTable(null);
+    setSelectedOrder(null);
+  };
+
+  const handlePayOrderItems = async (itemIds: string[], amount: number, method: string, discountAmount?: number, discountReason?: string) => {
+    if (!selectedOrder) return;
+    try {
+      await payOrderItems(selectedOrder.id, itemIds, amount, method, discountAmount, discountReason);
+      toast.success(`${amount} ₺ ürün bazlı ödeme tamamlandı`);
+      playSuccess();
+    } catch {
+      toast.error('Ürün bazlı ödeme başarısız');
+    }
     setSelectedTable(null);
     setSelectedOrder(null);
   };
@@ -133,10 +150,10 @@ export default function CashierPOS() {
             const isWaiting = t.status === 'waiting_payment';
             const hasOrder = !!order;
 
-            const totalPaid = (order?.payments || []).reduce((s, p) => s + p.amount, 0);
-            const prepayment = order?.prepayment || 0;
-            const remaining = order ? Math.max(0, order.total - totalPaid - prepayment) : 0;
-            const hasPrepayment = prepayment > 0 || totalPaid > 0;
+            const allPayments = order?.payments || [];
+            const totalPaid = allPayments.reduce((s, p) => s + p.amount, 0);
+            const remaining = order ? Math.max(0, order.total - totalPaid) : 0;
+            const hasAnyPayment = totalPaid > 0;
 
             return (
               <button
@@ -152,7 +169,7 @@ export default function CashierPOS() {
 
                 {order && (
                   <>
-                    {hasPrepayment ? (
+                    {hasAnyPayment ? (
                       <>
                         <span className="text-[10px] text-muted-foreground line-through mt-1">{order.total} TL</span>
                         <span className="text-sm font-black text-pos-warning">{remaining} TL kalan</span>
@@ -196,6 +213,7 @@ export default function CashierPOS() {
           staffName={staffName || ''}
           onCompletePayment={handleCompletePayment}
           onPrepayment={handlePrepayment}
+          onPayOrderItems={handlePayOrderItems}
           onClose={handleClosePayment}
         />
       )}

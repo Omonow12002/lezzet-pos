@@ -45,8 +45,9 @@ function CancelModal({
     await supabase.from('kitchen_logs').insert({
       restaurant_id: restaurantId,
       order_id: target.orderId,
-      action: 'iptal',
-      note: reason.trim() || '(Açıklama girilmedi)',
+      reason: 'cancelled',
+      quantity: 1,
+      notes: reason.trim() || '(Aciklama girilmedi)',
       created_at: new Date().toISOString(),
     });
     onConfirm(target.orderId);
@@ -192,9 +193,9 @@ export default function MutfakEkrani() {
 
   const [cancelTarget, setCancelTarget] = useState<CancelTarget | null>(null);
 
-  const kitchenOrders = orders.filter(o =>
-    o.status === 'sent_to_kitchen' || o.status === 'preparing' || o.status === 'ready'
-  );
+  const kitchenOrders = orders
+    .filter(o => o.status === 'sent_to_kitchen' || o.status === 'preparing' || o.status === 'ready')
+    .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
   const newCount = kitchenOrders.filter(o => o.status === 'sent_to_kitchen').length;
 
   const prevNewCount = useRef(newCount);

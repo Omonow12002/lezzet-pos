@@ -3,7 +3,7 @@ import { supabase } from '@/lib/supabase';
 import {
   Category, MenuItem, Table, Order, OrderItem, OrderStatus,
   ModifierGroup, TableStatus, Payment, ModifierOption,
-  Staff, DailyClosure,
+  Staff, DailyClosure, OrderItemPaymentStatus,
 } from '@/types/pos';
 
 // ─── Context Type ──────────────────────────────────
@@ -55,6 +55,8 @@ interface POSContextType {
   removeModifierOption: (id: string, groupId: string) => Promise<void>;
   markOrderReady: (orderId: string) => Promise<void>;
   completePayment: (orderId: string, amount: number, method: string, staffId?: string, discountAmount?: number, discountReason?: string) => Promise<void>;
+  recordPrepayment: (orderId: string, amount: number, method?: string) => Promise<void>;
+  payOrderItems: (orderId: string, itemIds: string[], amount: number, method: string, discountAmount?: number, discountReason?: string) => Promise<void>;
   refetchOrders: () => Promise<void>;
 }
 
@@ -108,6 +110,7 @@ function mapOrderItem(row: Record<string, unknown>, lookup?: Map<string, MenuIte
     note: (row.note as string) || undefined,
     sentToKitchen: (row.sent_to_kitchen as boolean) ?? true,
     status: (row.status as OrderItem['status']) || 'pending',
+    paymentStatus: (row.payment_status as OrderItemPaymentStatus) || 'unpaid',
   };
 }
 
@@ -117,6 +120,7 @@ function mapPayment(row: Record<string, unknown>): Payment {
     orderId: row.order_id as string,
     amount: Number(row.amount),
     method: row.method as Payment['method'],
+    type: (row.type as Payment['type']) || 'payment',
     createdAt: new Date(row.created_at as string),
     staffId: (row.staff_id as string) || undefined,
     discountAmount: row.discount_amount ? Number(row.discount_amount) : undefined,
@@ -394,10 +398,14 @@ export function POSProvider({ restaurantId, staffId, children }: POSProviderProp
     setProductModifierMap(pmMap);
   }, [restaurantId]);
 
-  // ─── Polling Fallback ──────────────────────────
+  // ─── Polling Fallback (slower interval — realtime is primary) ──
 
+  const realtimeConnectedRef = useRef(false);
   useEffect(() => {
-    const interval = setInterval(refetchOrders, 15000);
+    const interval = setInterval(() => {
+      // Poll less frequently when realtime is connected
+      refetchOrders();
+    }, realtimeConnectedRef.current ? 30000 : 10000);
     return () => clearInterval(interval);
   }, [refetchOrders]);
 
@@ -516,8 +524,10 @@ export function POSProvider({ restaurantId, staffId, children }: POSProviderProp
       })
       .subscribe((status) => {
         if (status === 'SUBSCRIBED') {
+          realtimeConnectedRef.current = true;
           console.log('[POS Realtime] Connected for', restaurantId);
         } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+          realtimeConnectedRef.current = false;
           console.warn('[POS Realtime] Subscription issue:', status, '— polling fallback active');
         }
       });
@@ -561,11 +571,38 @@ export function POSProvider({ restaurantId, staffId, children }: POSProviderProp
   // ─── Order Functions ───────────────────────────
 
   const addOrder = useCallback(async (order: Order): Promise<{ success: boolean; error?: string }> => {
+    // Build items payload for the atomic RPC
+    const itemsPayload = order.items.map(item => ({
+      menu_item_id: item.menuItem.id || '',
+      name: item.menuItem.name,
+      price: item.menuItem.price + item.modifiers.reduce((s, m) => s + m.extraPrice, 0),
+      quantity: item.quantity,
+      modifiers: item.modifiers,
+      note: item.note || '',
+    }));
+
+    // Try atomic RPC first — single transaction for order + items + table status
+    const { data: rpcOrderId, error: rpcErr } = await supabase.rpc('create_order_with_items', {
+      p_restaurant_id: restaurantId,
+      p_table_id: order.tableId,
+      p_table_name: order.tableName,
+      p_staff_id: staffId || null,
+      p_status: order.status,
+      p_items: itemsPayload,
+    });
+
+    if (!rpcErr && rpcOrderId) {
+      // RPC succeeded — refetch to get the DB-created order with proper IDs
+      await refetchOrders();
+      return { success: true };
+    }
+
+    // Fallback: RPC not available (migration not applied) — use manual inserts
+    if (rpcErr) console.warn('create_order_with_items RPC unavailable, falling back:', rpcErr.message);
+
     const orderId = crypto.randomUUID();
     const itemsWithIds = order.items.map(item => ({ ...item, id: crypto.randomUUID() }));
     const newOrder: Order = { ...order, id: orderId, items: itemsWithIds };
-
-    // Optimistic update -- rolled back on DB failure
     setOrders(prev => [...prev, newOrder]);
 
     const { error } = await supabase.from('orders').insert({
@@ -574,7 +611,7 @@ export function POSProvider({ restaurantId, staffId, children }: POSProviderProp
       table_name: order.tableName,
       status: order.status,
       total: order.total,
-      prepayment: order.prepayment || 0,
+      prepayment: 0,
       restaurant_id: restaurantId,
       staff_id: staffId || null,
     });
@@ -586,7 +623,6 @@ export function POSProvider({ restaurantId, staffId, children }: POSProviderProp
     }
 
     if (itemsWithIds.length > 0) {
-      // Try full insert (with denormalized columns from migration_complete_fix.sql)
       const { error: itemsErr } = await supabase.from('order_items').insert(
         itemsWithIds.map(item => ({
           id: item.id,
@@ -602,29 +638,11 @@ export function POSProvider({ restaurantId, staffId, children }: POSProviderProp
           restaurant_id: restaurantId,
         }))
       );
-      if (itemsErr) {
-        // Retry without restaurant_id/status (for databases where migration_complete_fix hasn't been applied)
-        console.warn('addOrder items full insert failed, retrying without optional columns:', itemsErr.message);
-        const { error: retryErr } = await supabase.from('order_items').insert(
-          itemsWithIds.map(item => ({
-            id: item.id,
-            order_id: orderId,
-            menu_item_id: item.menuItem.id || null,
-            menu_item_name: item.menuItem.name,   // NOT NULL in all schema versions
-            menu_item_price: item.menuItem.price, // NOT NULL in all schema versions
-            quantity: item.quantity,
-            modifiers: item.modifiers,
-            note: item.note || null,
-            sent_to_kitchen: true,
-            // restaurant_id and status omitted — may not exist in old schema
-          }))
-        );
-        if (retryErr) console.error('addOrder items retry error:', retryErr.message);
-      }
+      if (itemsErr) console.error('addOrder items error:', itemsErr.message);
     }
 
     return { success: true };
-  }, [restaurantId, staffId]);
+  }, [restaurantId, staffId, refetchOrders]);
 
   const updateOrder = useCallback((orderId: string, updates: Partial<Order>) => {
     setOrders(prev => prev.map(o => o.id === orderId ? { ...o, ...updates } : o));
@@ -640,13 +658,17 @@ export function POSProvider({ restaurantId, staffId, children }: POSProviderProp
     }
   }, []);
 
-  const updateOrderStatus = useCallback((orderId: string, status: OrderStatus) => {
+  const updateOrderStatus = useCallback(async (orderId: string, status: OrderStatus) => {
+    // DB-first: write to database, then update local state
+    const { error } = await supabase.from('orders').update({ status }).eq('id', orderId);
+    if (error) {
+      console.error('updateOrderStatus error:', error);
+      return;
+    }
+    // Apply locally only after DB succeeds
     const order = ordersRef.current.find(o => o.id === orderId);
     const updatedOrders = ordersRef.current.map(o => o.id === orderId ? { ...o, status } : o);
     setOrders(updatedOrders);
-    supabase.from('orders').update({ status }).eq('id', orderId).then(({ error }) => {
-      if (error) console.error('updateOrderStatus error:', error);
-    });
     if (order?.tableId) {
       const tableStatus = deriveTableStatus(updatedOrders, order.tableId);
       setTableStatus(order.tableId, tableStatus);
@@ -727,6 +749,54 @@ export function POSProvider({ restaurantId, staffId, children }: POSProviderProp
       throw new Error(error.message);
     }
   }, [staffId, refetchOrders, setTableStatus]);
+
+  const recordPrepaymentFn = useCallback(async (orderId: string, amount: number, method = 'nakit') => {
+    const { error } = await supabase.rpc('record_prepayment', {
+      p_order_id: orderId,
+      p_amount: amount,
+      p_method: method,
+      p_staff_id: staffId || null,
+    });
+
+    if (error) {
+      // Fallback: direct insert if RPC not available
+      console.warn('record_prepayment RPC unavailable, falling back:', error.message);
+      const paymentId = crypto.randomUUID();
+      const order = ordersRef.current.find(o => o.id === orderId);
+      await supabase.from('payments').insert({
+        id: paymentId, order_id: orderId, amount, method,
+        type: 'prepayment', restaurant_id: order?.restaurantId || restaurantId,
+        staff_id: staffId || null,
+      });
+      await supabase.from('orders').update({
+        prepayment: (order?.prepayment || 0) + amount,
+      }).eq('id', orderId);
+    }
+
+    await refetchOrders();
+  }, [staffId, restaurantId, refetchOrders]);
+
+  const payOrderItemsFn = useCallback(async (
+    orderId: string, itemIds: string[], amount: number, method: string,
+    discountAmount?: number, discountReason?: string
+  ) => {
+    const { error } = await supabase.rpc('pay_order_items', {
+      p_order_id: orderId,
+      p_item_ids: itemIds,
+      p_amount: amount,
+      p_method: method,
+      p_staff_id: staffId || null,
+      p_discount_amount: discountAmount || 0,
+      p_discount_reason: discountReason || null,
+    });
+
+    if (error) {
+      console.error('pay_order_items error:', error);
+      throw new Error(error.message);
+    }
+
+    await refetchOrders();
+  }, [staffId, refetchOrders]);
 
   // ─── Admin CRUD Helpers ────────────────────────
 
@@ -972,6 +1042,8 @@ export function POSProvider({ restaurantId, staffId, children }: POSProviderProp
       addModifierGroup, updateModifierGroup, removeModifierGroup,
       addModifierOption, updateModifierOption, removeModifierOption,
       markOrderReady, completePayment: completePaymentFn,
+      recordPrepayment: recordPrepaymentFn,
+      payOrderItems: payOrderItemsFn,
       refetchOrders,
     }}>
       {loading ? (
